@@ -1,0 +1,543 @@
+﻿[
+    {
+        "id":  "phishing-01",
+        "category":  "Phishing",
+        "title":  "A sua conta será bloqueada",
+        "difficulty":  "Fácil",
+        "description":  "Uma mensagem urgente informa que existe actividade incomum na sua conta e pede uma confirmação imediata.",
+        "environment":  "email",
+        "sequence":  1,
+        "steps":  [
+                      {
+                          "id":  "step_01",
+                          "type":  "email",
+                          "title":  "Uma mensagem urgente chegou à sua caixa de correio",
+                          "instruction":  "Está perante uma mensagem recebida na sua caixa de correio. Utilize o ambiente como faria normalmente.",
+                          "email":  {
+                                        "sender":  "Segurança Online",
+                                        "sender_email":  "alerta@seguranca-verificacao.example",
+                                        "subject":  "ACÇÃO NECESSÁRIA: confirme a sua conta",
+                                        "message":  "Detectámos uma actividade incomum na sua conta. Para evitar a suspensão do acesso, confirme os seus dados através do procedimento indicado abaixo.",
+                                        "link_text":  "Confirmar a minha conta",
+                                        "link_target":  "seguranca-verificacao.example/confirmar"
+                                    },
+                          "interactions":  [
+                                               {
+                                                   "id":  "inspect_sender",
+                                                   "type":  "inspect",
+                                                   "label":  "Ver detalhes do remetente",
+                                                   "destination":  null,
+                                                   "next_step":  "step_01"
+                                               },
+                                               {
+                                                   "id":  "open_link",
+                                                   "type":  "link",
+                                                   "label":  "Confirmar a minha conta",
+                                                   "destination":  "fake-login",
+                                                   "next_step":  "step_02"
+                                               },
+                                               {
+                                                   "id":  "report_email",
+                                                   "type":  "report",
+                                                   "label":  "Denunciar esta mensagem",
+                                                   "destination":  "safe-result",
+                                                   "next_step":  "step_03"
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_02",
+                          "type":  "fake_login",
+                          "title":  "Página de autenticação",
+                          "instruction":  "A ligação abriu uma página de autenticação. Analise-a antes de introduzir qualquer informação.",
+                          "page":  {
+                                       "brand":  "Segurança Online",
+                                       "title":  "Confirmar a sua conta",
+                                       "description":  "Para manter o acesso activo, confirme os dados da sua conta.",
+                                       "url":  "https://seguranca-verificacao.example/confirmar"
+                                   },
+                          "interactions":  [
+                                               {
+                                                   "id":  "inspect_url",
+                                                   "type":  "inspect",
+                                                   "label":  "Analisar o endereço",
+                                                   "destination":  null,
+                                                   "next_step":  "step_02"
+                                               },
+                                               {
+                                                   "id":  "submit_credentials",
+                                                   "type":  "credentials",
+                                                   "label":  "Confirmar conta",
+                                                   "destination":  "attack",
+                                                   "next_step":  "step_03"
+                                               },
+                                               {
+                                                   "id":  "leave_page",
+                                                   "type":  "safe",
+                                                   "label":  "Sair da página",
+                                                   "destination":  "safe-result",
+                                                   "next_step":  "step_03"
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_03",
+                          "type":  "consequence",
+                          "title":  "A experiência terminou",
+                          "instruction":  "A simulação terminou. O seu comportamento será agora analisado.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "finish",
+                                                   "type":  "finish",
+                                                   "label":  "Ver análise do meu comportamento",
+                                                   "destination":  "report",
+                                                   "next_step":  null,
+                                                   "completed":  true
+                                               }
+                                           ]
+                      }
+                  ]
+    },
+    {
+        "id":  "phishing-02",
+        "category":  "Phishing",
+        "title":  "O QR Code para o portal académico",
+        "difficulty":  "Avançado",
+        "sender":  "Secretaria Académica \u003ccomunicacao@portal-aluno.example\u003e",
+        "subject":  "Confirmação de presença — acção necessária",
+        "message":  "Por motivos de actualização do sistema académico, a sua presença deve ser reconfirmada através do novo acesso móvel. Utilize o QR Code abaixo para concluir a confirmação antes do final do período de validação.",
+        "link_text":  "Abrir acesso móvel",
+        "link_target":  "https://portal-aluno-verify.example/acesso",
+        "safe_action":  "inspect",
+        "explanation":  "Esta experiência combina engenharia de confiança, QR Code e uma página de autenticação aparentemente legítima. O risco não está apenas na mensagem inicial: é necessário avaliar a origem, o destino real e o pedido de credenciais em cada etapa.",
+        "experience_type":  "quishing_advanced",
+        "context":  "Recebe uma comunicação académica aparentemente legítima que o encaminha para um acesso móvel através de QR Code.",
+        "mobile":  {
+                       "browser_name":  "Portal Académico",
+                       "browser_url":  "https://portal-aluno-verify.example/acesso",
+                       "page_title":  "Portal do Estudante",
+                       "banner":  "Acesso académico protegido",
+                       "message":  "Para continuar, confirme a sua identidade institucional."
+                   },
+        "login":  {
+                      "title":  "Aceder ao Portal do Estudante",
+                      "helper":  "Utilize as credenciais da sua conta académica para continuar.",
+                      "submit_label":  "Continuar"
+                  },
+        "consequence":  "A submissão foi recebida pelo ambiente controlado da experiência. Num caso real, uma página deste tipo poderia permitir a captura das credenciais e posterior tentativa de acesso à conta.",
+        "steps":  [
+                      {
+                          "id":  "step_01",
+                          "title":  "Mensagem recebida",
+                          "environment":  "email",
+                          "interactions":  [
+                                               "inspect_sender",
+                                               "inspect",
+                                               "open_link",
+                                               "report"
+                                           ]
+                      },
+                      {
+                          "id":  "step_02",
+                          "title":  "Acesso móvel",
+                          "environment":  "mobile",
+                          "interactions":  [
+                                               "inspect_url",
+                                               "open_link",
+                                               "leave_page",
+                                               "report"
+                                           ]
+                      },
+                      {
+                          "id":  "step_03",
+                          "title":  "Autenticação",
+                          "environment":  "login",
+                          "interactions":  [
+                                               "inspect_url",
+                                               "credentials",
+                                               "leave_page",
+                                               "report"
+                                           ]
+                      },
+                      {
+                          "id":  "step_04",
+                          "title":  "Consequência",
+                          "environment":  "consequence",
+                          "interactions":  [
+                                               "finish"
+                                           ]
+                      }
+                  ]
+    },
+    {
+        "id":  "phishing-03",
+        "category":  "Phishing",
+        "title":  "Pagamento pendente",
+        "difficulty":  "Médio",
+        "sender":  "Serviço de Pagamentos \u003cpagamentos@conta-segura.example\u003e",
+        "subject":  "Pagamento pendente — última notificação",
+        "message":  "Existe um pagamento pendente associado à sua conta. Aceda ao portal para evitar custos adicionais.",
+        "link_text":  "Abrir portal de pagamento",
+        "link_target":  "https://conta-segura.example/pagamento",
+        "safe_action":  "report",
+        "explanation":  "A combinação de cobrança, pressão temporal e pedido de autorização através de uma ligação deve ser tratada com cautela e confirmada por canais oficiais.",
+        "experience_type":  "payment_portal_authorisation",
+        "context":  "Uma comunicação financeira conduz o utilizador para um portal de pagamento onde pode analisar uma operação, consultar os dados e decidir se pretende continuar até à autorização.",
+        "portal":  {
+                       "browser_name":  "Conta Segura",
+                       "browser_url":  "https://conta-segura.example/pagamento",
+                       "page_title":  "Central de pagamentos",
+                       "amount":  "8 450,00 MZN",
+                       "reference":  "PG-80421",
+                       "beneficiary":  "Serviços Online MZ",
+                       "description":  "Regularização de pagamento",
+                       "deadline":  "Hoje, 18:00"
+                   },
+        "steps":  [
+                      {
+                          "id":  "step_01",
+                          "title":  "Mensagem de pagamento recebida",
+                          "type":  "email",
+                          "interactions":  [
+                                               {
+                                                   "id":  "inspect_sender",
+                                                   "type":  "inspect_sender",
+                                                   "label":  "Ver detalhes do remetente",
+                                                   "destination":  null,
+                                                   "next_step":  "step_01"
+                                               },
+                                               {
+                                                   "id":  "inspect_message",
+                                                   "type":  "inspect",
+                                                   "label":  "Inspeccionar mensagem",
+                                                   "destination":  null,
+                                                   "next_step":  "step_01"
+                                               },
+                                               {
+                                                   "id":  "open_link",
+                                                   "type":  "link",
+                                                   "label":  "Abrir portal de pagamento",
+                                                   "destination":  "payment_portal",
+                                                   "next_step":  "step_02"
+                                               },
+                                               {
+                                                   "id":  "report_email",
+                                                   "type":  "report",
+                                                   "label":  "Denunciar mensagem",
+                                                   "destination":  "safe-result",
+                                                   "next_step":  null
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_02",
+                          "title":  "Portal de pagamento",
+                          "type":  "payment_portal",
+                          "interactions":  [
+                                               {
+                                                   "id":  "inspect_url",
+                                                   "type":  "inspect_url",
+                                                   "label":  "Analisar endereço",
+                                                   "destination":  null,
+                                                   "next_step":  "step_02"
+                                               },
+                                               {
+                                                   "id":  "view_transaction",
+                                                   "type":  "details",
+                                                   "label":  "Ver dados da operação",
+                                                   "destination":  "transaction_details",
+                                                   "next_step":  "step_03"
+                                               },
+                                               {
+                                                   "id":  "leave_page",
+                                                   "type":  "leave_page",
+                                                   "label":  "Sair",
+                                                   "destination":  "safe-result",
+                                                   "next_step":  null
+                                               },
+                                               {
+                                                   "id":  "report_site",
+                                                   "type":  "report",
+                                                   "label":  "Denunciar site",
+                                                   "destination":  "safe-result",
+                                                   "next_step":  null
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_03",
+                          "title":  "Detalhes da operação",
+                          "type":  "transaction_details",
+                          "interactions":  [
+                                               {
+                                                   "id":  "inspect_payment_details",
+                                                   "type":  "details",
+                                                   "label":  "Consultar novamente",
+                                                   "destination":  null,
+                                                   "next_step":  "step_03"
+                                               },
+                                               {
+                                                   "id":  "continue_payment",
+                                                   "type":  "continue",
+                                                   "label":  "Continuar pagamento",
+                                                   "destination":  "authorisation",
+                                                   "next_step":  "step_04"
+                                               },
+                                               {
+                                                   "id":  "cancel",
+                                                   "type":  "cancel",
+                                                   "label":  "Cancelar operação",
+                                                   "destination":  "safe-result",
+                                                   "next_step":  null
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_04",
+                          "title":  "Autorização da operação",
+                          "type":  "authorisation",
+                          "interactions":  [
+                                               {
+                                                   "id":  "inspect_authorisation",
+                                                   "type":  "inspect",
+                                                   "label":  "Inspeccionar autorização",
+                                                   "destination":  null,
+                                                   "next_step":  "step_04"
+                                               },
+                                               {
+                                                   "id":  "submit_authorisation_code",
+                                                   "type":  "credentials",
+                                                   "label":  "Confirmar autorização",
+                                                   "destination":  "attack",
+                                                   "next_step":  "step_05"
+                                               },
+                                               {
+                                                   "id":  "cancel",
+                                                   "type":  "cancel",
+                                                   "label":  "Cancelar",
+                                                   "destination":  "safe-result",
+                                                   "next_step":  null
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_05",
+                          "title":  "Resposta do serviço",
+                          "type":  "consequence",
+                          "interactions":  [
+                                               {
+                                                   "id":  "finish",
+                                                   "type":  "finish",
+                                                   "label":  "Concluir experiência",
+                                                   "destination":  "report",
+                                                   "next_step":  null,
+                                                   "completed":  true
+                                               }
+                                           ]
+                      }
+                  ]
+    },
+    {
+        "id":  "phishing-04",
+        "category":  "Phishing",
+        "title":  "Documento partilhado consigo",
+        "difficulty":  "Médio",
+        "description":  "Uma mensagem inesperada conduz o estudante através de uma experiência de partilha de documentos.",
+        "environment":  "email",
+        "sequence":  4,
+        "safe_action":  "report",
+        "steps":  [
+                      {
+                          "id":  "step_01",
+                          "type":  "email",
+                          "title":  "Mensagem recebida",
+                          "instruction":  "A mensagem foi apresentada na caixa de entrada.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "inspect_sender",
+                                                   "type":  "inspect",
+                                                   "label":  "Ver detalhes",
+                                                   "destination":  null,
+                                                   "next_step":  "step_01"
+                                               },
+                                               {
+                                                   "id":  "close_sender_details",
+                                                   "type":  "inspect",
+                                                   "label":  "Ocultar detalhes",
+                                                   "destination":  null,
+                                                   "next_step":  "step_01"
+                                               },
+                                               {
+                                                   "id":  "open_link",
+                                                   "type":  "link",
+                                                   "label":  "Abrir documento",
+                                                   "destination":  "document-landing",
+                                                   "next_step":  "step_02"
+                                               },
+                                               {
+                                                   "id":  "report",
+                                                   "type":  "report",
+                                                   "label":  "Denunciar mensagem",
+                                                   "destination":  "report-processing",
+                                                   "next_step":  "step_05"
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_02",
+                          "type":  "document",
+                          "title":  "Documento partilhado",
+                          "instruction":  "O documento foi aberto através da plataforma de partilha.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "continue_document",
+                                                   "type":  "continue",
+                                                   "label":  "Continuar",
+                                                   "destination":  "document-viewer",
+                                                   "next_step":  "step_03"
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_03",
+                          "type":  "document_viewer",
+                          "title":  "Visualização do documento",
+                          "instruction":  "O documento está disponível para consulta.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "download_document",
+                                                   "type":  "download",
+                                                   "label":  "Descarregar",
+                                                   "destination":  "document-processing",
+                                                   "next_step":  "step_04"
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_04",
+                          "type":  "consequence",
+                          "title":  "Processamento",
+                          "instruction":  "O pedido associado ao documento foi processado.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "finish",
+                                                   "type":  "finish",
+                                                   "label":  "Próxima simulação",
+                                                   "destination":  "phishing-05",
+                                                   "next_step":  null,
+                                                   "completed":  true
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_05",
+                          "type":  "report",
+                          "title":  "Pedido processado",
+                          "instruction":  "O pedido foi recebido pelo serviço de mensagens.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "finish",
+                                                   "type":  "finish",
+                                                   "label":  "Próxima simulação",
+                                                   "destination":  "phishing-05",
+                                                   "next_step":  null,
+                                                   "completed":  true
+                                               }
+                                           ]
+                      }
+                  ]
+    },
+    {
+        "id":  "phishing-05",
+        "category":  "Phishing",
+        "title":  "Conta académica em risco",
+        "difficulty":  "Difícil",
+        "description":  "Uma comunicação aparentemente institucional conduz o estudante através de um processo de autenticação e actualização de conta.",
+        "environment":  "email",
+        "sequence":  5,
+        "safe_action":  "report",
+        "steps":  [
+                      {
+                          "id":  "step_01",
+                          "type":  "email",
+                          "title":  "Mensagem recebida",
+                          "instruction":  "A mensagem foi apresentada na caixa de entrada.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "open_link",
+                                                   "type":  "link",
+                                                   "label":  "Actualizar palavra-passe",
+                                                   "destination":  "fake-login",
+                                                   "next_step":  "step_02"
+                                               },
+                                               {
+                                                   "id":  "report",
+                                                   "type":  "report",
+                                                   "label":  "Denunciar mensagem",
+                                                   "destination":  "report-processing",
+                                                   "next_step":  "step_03"
+                                               },
+                                               {
+                                                   "id":  "leave_page",
+                                                   "type":  "safe",
+                                                   "label":  "Sair",
+                                                   "destination":  "email-closing",
+                                                   "next_step":  "step_03"
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_02",
+                          "type":  "fake_login",
+                          "title":  "Actualização da conta",
+                          "instruction":  "O formulário de autenticação foi apresentado.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "show_password",
+                                                   "type":  "inspect",
+                                                   "label":  "Mostrar palavra-passe",
+                                                   "destination":  null,
+                                                   "next_step":  "step_02"
+                                               },
+                                               {
+                                                   "id":  "hide_password",
+                                                   "type":  "inspect",
+                                                   "label":  "Ocultar palavra-passe",
+                                                   "destination":  null,
+                                                   "next_step":  "step_02"
+                                               },
+                                               {
+                                                   "id":  "submit_credentials",
+                                                   "type":  "credentials",
+                                                   "label":  "Continuar",
+                                                   "destination":  "validation",
+                                                   "next_step":  "step_03"
+                                               },
+                                               {
+                                                   "id":  "leave_page",
+                                                   "type":  "safe",
+                                                   "label":  "Sair",
+                                                   "destination":  "login-closing",
+                                                   "next_step":  "step_03"
+                                               }
+                                           ]
+                      },
+                      {
+                          "id":  "step_03",
+                          "type":  "consequence",
+                          "title":  "Processamento da conta",
+                          "instruction":  "O processo associado à conta terminou.",
+                          "interactions":  [
+                                               {
+                                                   "id":  "finish",
+                                                   "type":  "finish",
+                                                   "label":  "Encerrar simulação",
+                                                   "destination":  "final-report",
+                                                   "next_step":  null,
+                                                   "completed":  true
+                                               }
+                                           ]
+                      }
+                  ]
+    }
+]

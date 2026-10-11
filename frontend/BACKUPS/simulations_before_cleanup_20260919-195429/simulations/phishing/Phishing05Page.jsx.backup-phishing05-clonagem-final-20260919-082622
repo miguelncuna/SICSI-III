@@ -1,0 +1,412 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Download,
+  FileWarning,
+  Globe2,
+  Laptop,
+  LockKeyhole,
+  MonitorSmartphone,
+  RefreshCw,
+  Shield,
+  ShieldAlert,
+  UserRound,
+  XCircle,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../../../context/AuthContext";
+import {
+  completeSimulation,
+  getCurrentSimulation,
+  registerAction,
+  startSimulation,
+} from "../engine/simulationEngine";
+import { clearSessionEvents } from "../engine/simulationTelemetry";
+import { completeSimulationSession } from "../engine/simulationSession";
+import { jsPDF } from "jspdf";
+
+const SIMULATION = {
+  area: "phishing",
+  id: "phishing-05",
+  number: 5,
+  title: "Conta académica",
+};
+
+const STATES = {
+  HOME: "incident_home",
+  ALERT: "incident_alert",
+  CENTER: "incident_center",
+  ACTIVITY: "incident_activity",
+  DEVICES: "incident_devices",
+  SECURITY_CHANGES: "incident_security_changes",
+  SESSION_DETAIL: "incident_session_detail",
+  DECISION: "incident_decision",
+  CONSEQUENCE: "incident_consequence",
+  RESPONSE: "incident_response",
+  RESPONSE_PROCESSING: "incident_response_processing",
+  RESPONSE_RESULT: "incident_response_result",
+};
+
+const EVIDENCE = {
+  activity: {
+    title: "Actividade recente",
+    kicker: "EVIDÊNCIA 01",
+    icon: Activity,
+    description:
+      "Existem acontecimentos recentes associados à conta que merecem validação antes de qualquer confirmação.",
+    items: [
+      { label: "Tentativa de acesso", value: "Há 12 minutos", detail: "Origem não reconhecida pelo utilizador." },
+      { label: "Sessão iniciada", value: "Windows · Chrome", detail: "A sessão permanece activa." },
+      { label: "Alteração sensível", value: "Há 8 minutos", detail: "Foi iniciado um processo relacionado com segurança da conta." },
+    ],
+  },
+  devices: {
+    title: "Dispositivos e sessões",
+    kicker: "EVIDÊNCIA 02",
+    icon: MonitorSmartphone,
+    description:
+      "Compare os dispositivos conhecidos com os que aparecem actualmente associados à conta.",
+    items: [
+      { label: "Dispositivo conhecido", value: "Windows · sessão actual", detail: "Dispositivo utilizado nesta experiência." },
+      { label: "Novo dispositivo", value: "Android · localização desconhecida", detail: "Actividade registada há poucos minutos." },
+      { label: "Sessões activas", value: "2 sessões", detail: "Uma das sessões não corresponde ao padrão apresentado." },
+    ],
+  },
+  security: {
+    title: "Alterações de segurança",
+    kicker: "EVIDÊNCIA 03",
+    icon: ShieldAlert,
+    description:
+      "Uma conta comprometida pode apresentar alterações aparentemente pequenas antes de perder o controlo.",
+    items: [
+      { label: "Método de recuperação", value: "Alteração pendente", detail: "O pedido não foi iniciado conscientemente pelo utilizador." },
+      { label: "Verificação adicional", value: "Solicitada", detail: "Foi gerado um desafio de segurança inesperado." },
+      { label: "Protecção", value: "Revisão recomendada", detail: "A origem da solicitação ainda não foi validada." },
+    ],
+  },
+  session: {
+    title: "Detalhes da sessão",
+    kicker: "EVIDÊNCIA 04",
+    icon: Laptop,
+    description:
+      "A análise contextual ajuda a distinguir uma sessão legítima de uma sessão que deve ser contida.",
+    items: [
+      { label: "Navegador", value: "Chrome", detail: "Ambiente web institucional simulado." },
+      { label: "Localização", value: "Maputo", detail: "A localização apresentada não prova a legitimidade da sessão." },
+      { label: "Estado", value: "Activo", detail: "A sessão pode continuar enquanto não for revogada." },
+    ],
+  },
+};
+
+const SIMULATION_LABELS = {
+  "phishing-01": "Actualização de dados académicos",
+  "phishing-02": "Verificação urgente da conta",
+  "phishing-03": "Pagamento",
+  "phishing-04": "Documento partilhado",
+  "phishing-05": "Conta académica",
+};
+
+const SAFE_ACTIONS = [
+  "investigate_alert",
+  "review_activity",
+  "review_devices",
+  "review_security_changes",
+  "review_session",
+  "block_unknown_session",
+  "secure_account",
+  "contact_support",
+  "finish_secure_response",
+];
+
+const RISK_ACTIONS = [
+  "ignore_security_alert",
+  "keep_unknown_session",
+  "confirm_unverified_activity",
+  "continue_without_protection",
+  "approve_unverified_request",
+];
+
+function formatDuration(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getAccountEmail(user) {
+  return user?.email || user?.username || user?.login || "miguel.ncuna@sicsi.edu";
+}
+
+function GlassButton({ children, icon: Icon = ArrowRight, onClick, variant = "primary", disabled = false, className = "" }) {
+  const variants = {
+    primary: "bg-blue-700 text-white shadow-sm hover:bg-blue-800",
+    secondary: "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+    danger: "border border-red-200 bg-white text-red-700 hover:bg-red-50",
+    success: "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50",
+  };
+
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}>
+      {Icon ? <Icon size={17} /> : null}
+      {children}
+    </button>
+  );
+}
+
+function Shell({ children, onBack, title = "Conta académica", badge }) {
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            {onBack ? (
+              <button type="button" onClick={onBack} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800" aria-label="Voltar">
+                <ArrowLeft size={17} />
+              </button>
+            ) : null}
+            <div className="min-w-0">
+              <div className="text-sm font-black tracking-tight text-blue-800">SICSI</div>
+              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">{title}</div>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 sm:flex">
+            {badge ? <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-bold text-slate-500">{badge}</div> : null}
+            <div className="flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[10px] font-bold text-blue-700"><Shield size={13} /> Phishing 05 / 05</div>
+          </div>
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
+
+function ProgressBar({ step, total = 5 }) {
+  const progress = Math.min(100, Math.max(0, (step / total) * 100));
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400"><span>Progressão da experiência</span><span>{step} / {total}</span></div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${progress}%` }} /></div>
+    </div>
+  );
+}
+
+function EvidenceCard({ item, icon: Icon = FileWarning }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><Icon size={18} /></div>
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{item.label}</div>
+          <div className="mt-1 text-sm font-black text-slate-800">{item.value}</div>
+          <div className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, tone = "blue" }) {
+  const styles = { blue: "bg-blue-50 text-blue-700", red: "bg-red-50 text-red-700", emerald: "bg-emerald-50 text-emerald-700", slate: "bg-slate-50 text-slate-700" };
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div><div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{label}</div><div className="mt-2 text-xl font-black text-slate-800">{value}</div></div>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${styles[tone]}`}><Icon size={18} /></div>
+      </div>
+    </div>
+  );
+}
+
+function AcademicHomeView({ account, onStart }) {
+  return (
+    <Shell title="Conta académica" badge="Experiência imersiva">
+      <main className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
+        <div className="overflow-hidden rounded-[28px] bg-gradient-to-br from-blue-950 via-blue-900 to-blue-600 text-white shadow-2xl shadow-blue-900/20">
+          <div className="grid gap-8 p-7 md:grid-cols-[1.2fr_0.8fr] md:p-10">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-100">Simulação avançada</div>
+              <h1 className="mt-6 max-w-3xl text-3xl font-black tracking-tight md:text-5xl">Uma conta pode ser comprometida antes de o utilizador perceber.</h1>
+              <p className="mt-5 max-w-2xl text-sm leading-7 text-blue-100 md:text-base">Nesta experiência, terá de investigar sinais, cruzar evidências, tomar decisões e responder a um possível incidente de segurança da sua conta académica.</p>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row"><GlassButton icon={ShieldAlert} onClick={onStart} className="bg-white text-blue-900 hover:bg-blue-50">Investigar incidente</GlassButton><div className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-blue-50">Duração estimada: 5–8 minutos</div></div>
+              <ProgressBar step={0} />
+            </div>
+            <div className="rounded-[24px] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-100">Conta em análise</div>
+              <div className="mt-4 flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10"><UserRound size={22} /></div><div className="min-w-0"><div className="truncate text-sm font-black">{account}</div><div className="mt-1 text-[10px] text-blue-100">Conta institucional simulada</div></div></div>
+              <div className="mt-7 grid gap-3"><div className="rounded-2xl border border-white/10 bg-white/5 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-100">Situação</div><div className="mt-2 text-sm font-black">Actividade suspeita detectada</div></div><div className="rounded-2xl border border-white/10 bg-white/5 p-4"><div className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-100">Competência</div><div className="mt-2 text-sm font-black">Detecção · decisão · resposta</div></div></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function AlertView({ account, onInvestigate, onIgnore, onBack }) {
+  return (
+    <Shell title="Alerta de segurança" onBack={onBack} badge="Detecção">
+      <main className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12"><div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl">
+        <div className="bg-gradient-to-br from-blue-950 via-blue-900 to-blue-700 p-7 text-white md:p-9"><div className="flex items-start gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10"><ShieldAlert size={28} /></div><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-100">Alerta de segurança</div><h1 className="mt-2 text-2xl font-black md:text-3xl">Foi detectada uma actividade de autenticação inesperada.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100">A conta {account} apresenta sinais que exigem validação. Não parta do princípio de que um alerta é legítimo só porque utiliza a identidade visual institucional.</p></div></div></div>
+        <div className="space-y-5 p-6 md:p-8"><div className="grid gap-3 sm:grid-cols-3"><StatCard label="Origem" value="Não reconhecida" icon={Globe2} tone="red" /><StatCard label="Sessões" value="2 activas" icon={MonitorSmartphone} /><StatCard label="Estado" value="Requer revisão" icon={Clock3} tone="slate" /></div><div className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-start gap-3"><AlertCircle size={19} className="mt-0.5 shrink-0 text-amber-700" /><div><div className="text-xs font-black text-amber-900">Antes de responder</div><div className="mt-1 text-xs leading-5 text-amber-900/80">A pressão, a urgência e a aparência institucional não substituem a validação independente.</div></div></div></div><div className="grid gap-3 sm:grid-cols-2"><GlassButton icon={Shield} onClick={onInvestigate}>Investigar antes de decidir</GlassButton><GlassButton icon={XCircle} variant="danger" onClick={onIgnore}>Ignorar o alerta</GlassButton></div></div>
+      </div></main>
+    </Shell>
+  );
+}
+
+function IncidentCenterView({ reviewed, onEvidence, onDecision, onBack }) {
+  const cards = [["activity", Activity, "Actividade recente", "Procure sinais fora do seu padrão."],["devices", MonitorSmartphone, "Dispositivos e sessões", "Compare dispositivos e sessões activas."],["security", ShieldAlert, "Alterações de segurança", "Verifique mudanças que não iniciou."],["session", Laptop, "Detalhes da sessão", "Analise o contexto da sessão actual."]];
+  return (
+    <Shell title="Centro de incidentes" onBack={onBack} badge="Investigação"><main className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12"><div className="grid gap-5 lg:grid-cols-[1fr_0.34fr]">
+      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm md:p-8"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Investigação</div><h1 className="mt-2 text-2xl font-black text-slate-800 md:text-3xl">Centro de incidentes</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">Recolha evidências antes de tomar uma decisão. Não precisa de abrir tudo, mas uma decisão sem contexto pode aumentar o risco.</p></div><div className="mt-7 grid gap-3 md:grid-cols-2">{cards.map(([key, Icon, title, description]) => <button key={key} type="button" onClick={() => onEvidence(key)} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"><div className="flex items-start justify-between gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><Icon size={20} /></div><ChevronRight size={18} className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-500" /></div><h2 className="mt-5 text-sm font-black text-slate-800">{title}</h2><p className="mt-2 text-xs leading-5 text-slate-500">{description}</p><div className="mt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{reviewed[key] ? "Evidência consultada" : "Consultar evidência"}</div></button>)}</div></section>
+      <aside className="rounded-[28px] bg-gradient-to-br from-blue-950 via-blue-900 to-blue-700 p-6 text-white shadow-xl md:p-7"><div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-200">Estado da investigação</div><div className="mt-5 text-4xl font-black">{Object.values(reviewed).filter(Boolean).length}/4</div><div className="mt-1 text-xs text-blue-200">evidências consultadas</div><div className="mt-7 space-y-3">{Object.entries(reviewed).map(([key, value]) => <div key={key} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-3"><span className="text-xs font-bold capitalize">{key === "security" ? "Segurança" : key === "session" ? "Sessão" : key}</span>{value ? <CheckCircle2 size={16} className="text-emerald-300" /> : <Clock3 size={16} className="text-blue-200" />}</div>)}</div><button type="button" onClick={onDecision} className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-blue-900 transition hover:bg-blue-50">Tomar decisão<ArrowRight size={17} /></button></aside>
+    </div></main></Shell>
+  );
+}
+
+function EvidenceView({ type, onBack, onNext }) {
+  const evidence = EVIDENCE[type]; const Icon = evidence.icon;
+  return <Shell title={evidence.title} onBack={onBack} badge="Evidência"><main className="mx-auto max-w-4xl px-4 py-8 md:px-8 md:py-12"><div className="rounded-[28px] border border-slate-200 bg-white shadow-xl"><div className="bg-gradient-to-br from-blue-950 via-blue-900 to-blue-700 p-7 text-white md:p-9"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10"><Icon size={23} /></div><div className="mt-5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-100">{evidence.kicker}</div><h1 className="mt-2 text-2xl font-black md:text-3xl">{evidence.title}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100">{evidence.description}</p></div><div className="space-y-3 p-6 md:p-8">{evidence.items.map((item, index) => <EvidenceCard key={`${item.label}-${index}`} item={item} icon={index === 0 ? Icon : AlertCircle} />)}<div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-5"><div className="flex items-start gap-3"><Shield size={18} className="mt-0.5 shrink-0 text-blue-700" /><div><div className="text-xs font-black text-blue-900">Leitura recomendada</div><p className="mt-1 text-xs leading-5 text-slate-600">Uma evidência isolada não comprova um incidente. A interpretação correcta nasce da combinação de sinais.</p></div></div></div><div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><GlassButton variant="secondary" icon={ArrowLeft} onClick={onBack}>Voltar ao centro</GlassButton><GlassButton icon={CheckCircle2} onClick={onNext}>Marcar como consultada</GlassButton></div></div></div></main></Shell>;
+}
+
+function DecisionView({ reviewed, onSafe, onRisk, onBack }) {
+  const reviewedCount = Object.values(reviewed).filter(Boolean).length;
+  return <Shell title="Decisão de segurança" onBack={onBack} badge="Ponto crítico"><main className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12"><div className="rounded-[28px] border border-slate-200 bg-white shadow-xl"><div className="border-b border-slate-100 p-6 md:p-8"><div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Decisão crítica</div><h1 className="mt-2 text-2xl font-black text-slate-800 md:text-3xl">O que faria agora?</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">Tem {reviewedCount} de 4 evidências consultadas. A qualidade da decisão depende da validação, não da pressa.</p></div><div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3"><div className="text-[10px] font-bold uppercase tracking-[0.12em] text-blue-700">Princípio</div><div className="mt-1 text-sm font-black text-blue-950">Verificar → conter → confirmar</div></div></div></div><div className="grid gap-3 p-6 md:grid-cols-2 md:p-8"><button type="button" onClick={onSafe} className="group rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 text-left transition hover:-translate-y-0.5 hover:bg-emerald-50"><div className="flex items-center justify-between gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700"><Shield size={20} /></div><ArrowRight size={18} className="text-emerald-400" /></div><h2 className="mt-5 text-sm font-black text-emerald-950">Bloquear a sessão desconhecida</h2><p className="mt-2 text-xs leading-5 text-emerald-900/75">Contenha o risco e trate a actividade não reconhecida como um possível incidente até confirmação independente.</p></button><button type="button" onClick={onRisk} className="group rounded-2xl border border-red-200 bg-red-50/70 p-5 text-left transition hover:-translate-y-0.5 hover:bg-red-50"><div className="flex items-center justify-between gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-100 text-red-700"><XCircle size={20} /></div><ArrowRight size={18} className="text-red-400" /></div><h2 className="mt-5 text-sm font-black text-red-950">Manter a sessão e continuar</h2><p className="mt-2 text-xs leading-5 text-red-900/75">Considere a actividade suficientemente familiar e prossiga sem contenção imediata.</p></button></div></div></main></Shell>;
+}
+
+function ConsequenceView({ safe, title, description, decisionLabel, onContinue, onBack }) {
+  return <Shell title="Consequência da decisão" onBack={onBack} badge={safe ? "Decisão segura" : "Decisão de risco"}><main className="mx-auto max-w-4xl px-4 py-8 md:px-8 md:py-12"><div className={`overflow-hidden rounded-[28px] border bg-white shadow-xl ${safe ? "border-emerald-200" : "border-red-200"}`}><div className={`p-7 text-white md:p-9 ${safe ? "bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-600" : "bg-gradient-to-br from-red-800 via-red-700 to-red-600"}`}><div className="flex items-start gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10">{safe ? <CheckCircle2 size={28} /> : <ShieldAlert size={28} />}</div><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/75">Feedback imediato</div><h1 className="mt-2 text-2xl font-black md:text-3xl">{title}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/80">{description}</p></div></div></div><div className="space-y-5 p-6 md:p-8"><div className={`rounded-2xl border p-5 ${safe ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}><div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Decisão tomada</div><div className={`mt-2 text-sm font-black ${safe ? "text-emerald-950" : "text-red-950"}`}>{decisionLabel}</div></div><div className="grid gap-3 sm:grid-cols-3"><StatCard label="Detecção" value={safe ? "Protegida" : "Comprometida"} icon={ShieldAlert} tone={safe ? "emerald" : "red"} /><StatCard label="Sessão" value={safe ? "Contida" : "Activa"} icon={MonitorSmartphone} tone={safe ? "emerald" : "red"} /><StatCard label="Resposta" value={safe ? "Iniciada" : "Necessária"} icon={RefreshCw} tone="slate" /></div><GlassButton icon={ArrowRight} onClick={onContinue} className="w-full">Prosseguir para resposta ao incidente</GlassButton></div></div></main></Shell>;
+}
+
+function ResponseView({ safePath, onSecure, onRisky, onBack }) {
+  return <Shell title="Resposta ao incidente" onBack={onBack} badge="Contenção"><main className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12"><div className="rounded-[28px] border border-slate-200 bg-white shadow-xl"><div className="p-6 md:p-8"><div className="flex items-start gap-4"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><LockKeyhole size={23} /></div><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Resposta operacional</div><h1 className="mt-2 text-2xl font-black text-slate-800 md:text-3xl">Qual é a próxima acção?</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">Uma boa decisão não termina na detecção. É preciso reduzir a superfície de ataque e recuperar o controlo.</p></div></div><div className="mt-7 grid gap-3 md:grid-cols-2"><button type="button" onClick={onSecure} className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-left transition hover:bg-emerald-50/80"><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700"><Shield size={20} /></div><h2 className="mt-5 text-sm font-black text-emerald-950">Proteger a conta e encerrar a sessão suspeita</h2><p className="mt-2 text-xs leading-5 text-emerald-900/75">Revogue o acesso suspeito, reforce a segurança e procure ajuda institucional através de um canal independente.</p></button><button type="button" onClick={onRisky} className={`rounded-2xl border p-5 text-left transition ${safePath ? "border-slate-200 bg-slate-50 hover:bg-slate-100" : "border-red-200 bg-red-50 hover:bg-red-50/80"}`}><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-600"><ArrowRight size={20} /></div><h2 className="mt-5 text-sm font-black text-slate-900">Continuar sem alterar as protecções</h2><p className="mt-2 text-xs leading-5 text-slate-600">Adie a contenção e mantenha a sessão activa até existir mais informação.</p></button></div></div></div></main></Shell>;
+}
+
+function ResponseProcessingView() {
+  return <Shell title="Protecção da conta" badge="Processamento"><main className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4"><div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-xl"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><RefreshCw size={25} className="animate-spin" /></div><div className="mt-6 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Centro de segurança</div><h1 className="mt-2 text-xl font-black text-slate-800">A aplicar medidas de protecção</h1><p className="mt-3 text-sm leading-6 text-slate-500">A sessão suspeita está a ser revista e as medidas seleccionadas estão a ser processadas na simulação.</p></div></main></Shell>;
+}
+
+function ResponseResultView({ safe, onComplete, onDownload }) {
+  return <Shell title="Resultado da resposta" badge="Avaliação"><main className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12"><div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl"><div className={`p-7 text-white md:p-9 ${safe ? "bg-gradient-to-br from-emerald-800 via-emerald-700 to-emerald-600" : "bg-gradient-to-br from-red-800 via-red-700 to-red-600"}`}><div className="flex items-start gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">{safe ? <CheckCircle2 size={28} /> : <XCircle size={28} />}</div><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/75">Fecho da resposta</div><h1 className="mt-2 text-2xl font-black md:text-3xl">{safe ? "A conta foi colocada num estado de contenção." : "O risco permaneceu activo e exigiu uma intervenção adicional."}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/80">{safe ? "A decisão interrompeu o acesso suspeito e reduziu a possibilidade de continuação do incidente." : "A ausência de contenção manteve a sessão exposta. Na prática, ainda seria necessária uma intervenção de segurança."}</p></div></div></div><div className="p-6 md:p-8"><div className="grid gap-3 sm:grid-cols-3"><StatCard label="Resultado" value={safe ? "Contenção" : "Exposição"} icon={ShieldAlert} tone={safe ? "emerald" : "red"} /><StatCard label="Aprendizagem" value={safe ? "Aplicada" : "Necessária"} icon={CheckCircle2} tone={safe ? "emerald" : "red"} /><StatCard label="Percurso" value="Registado" icon={Activity} tone="slate" /></div><div className="mt-7 rounded-2xl border border-blue-100 bg-blue-50/60 p-5"><div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">O que será guardado no relatório</div><p className="mt-2 text-sm leading-6 text-slate-600">Apenas uma síntese das decisões relevantes e dos feedbacks recebidos nas experiências de phishing. O relatório não reproduz palavra-passe, códigos MFA ou uma lista exaustiva de cliques.</p></div><div className="mt-7 grid gap-3 sm:grid-cols-2"><GlassButton icon={Download} onClick={onDownload} variant="secondary">Baixar relatório em PDF</GlassButton><GlassButton icon={CheckCircle2} onClick={onComplete}>Finalizar simulação</GlassButton></div></div></div></main></Shell>;
+}
+
+function loadAllPhishingEvents() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("sicsi_simulation_events") || "[]");
+    return Array.isArray(parsed) ? parsed.filter((event) => String(event?.simulation_id || "").startsWith("phishing-")).sort((a, b) => new Date(a?.timestamp || 0).getTime() - new Date(b?.timestamp || 0).getTime()) : [];
+  } catch { return []; }
+}
+
+function actionLabel(action = "", metadata = {}) {
+  if (metadata?.decision_label) return metadata.decision_label;
+  const labels = {
+    investigate_alert: "Investigou o alerta antes de decidir",
+    ignore_security_alert: "Ignorou o alerta de segurança",
+    review_activity: "Consultou a actividade recente",
+    review_devices: "Consultou os dispositivos e sessões",
+    review_security_changes: "Consultou as alterações de segurança",
+    review_session: "Consultou os detalhes da sessão",
+    block_unknown_session: "Bloqueou a sessão desconhecida",
+    keep_unknown_session: "Manteve a sessão desconhecida activa",
+    confirm_unverified_activity: "Prosseguiu sem validar a actividade",
+    secure_account: "Seleccionou protecção da conta",
+    contact_support: "Escolheu um canal institucional independente",
+    continue_without_protection: "Continuou sem reforçar as protecções",
+    finish_secure_response: "Concluiu a resposta segura",
+    complete_simulation: "Concluiu a simulação",
+  };
+  return labels[action] || String(action || "Interacção relevante").replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function inferOutcome(event = {}) {
+  if (typeof event?.metadata?.safe === "boolean") return event.metadata.safe ? "positive" : "negative";
+  const action = String(event?.action || "").toLowerCase();
+  if (SAFE_ACTIONS.some((value) => action === value || action.includes(value))) return "positive";
+  if (RISK_ACTIONS.some((value) => action === value || action.includes(value))) return "negative";
+  return "neutral";
+}
+
+function buildReportData(account) {
+  const events = loadAllPhishingEvents();
+  const simulations = Object.entries(SIMULATION_LABELS).map(([id, label]) => {
+    const simulationEvents = events.filter((event) => event.simulation_id === id);
+    const relevant = simulationEvents.filter((event) => {
+      const outcome = inferOutcome(event);
+      return outcome !== "neutral" || event?.metadata?.report_relevant;
+    }).map((event) => ({
+      label: actionLabel(event.action, event.metadata),
+      outcome: inferOutcome(event),
+      feedback: event?.metadata?.feedback || (inferOutcome(event) === "positive" ? "A decisão contribuiu para reduzir o risco." : inferOutcome(event) === "negative" ? "A decisão aumentou ou manteve a exposição ao risco." : "Interacção registada no percurso."),
+    })).slice(-3);
+    return { id, label, relevant, positive: relevant.filter((item) => item.outcome === "positive").length, negative: relevant.filter((item) => item.outcome === "negative").length };
+  });
+  return { account, generatedAt: new Date(), simulations, positive: simulations.reduce((sum, item) => sum + item.positive, 0), negative: simulations.reduce((sum, item) => sum + item.negative, 0) };
+}
+
+function drawWrappedText(pdf, text, x, y, width, options = {}) {
+  const size = options.size || 9; const lineHeight = options.lineHeight || 4.8; const colour = options.colour || [71, 85, 105];
+  pdf.setFontSize(size); pdf.setTextColor(...colour); const lines = pdf.splitTextToSize(String(text || ""), width); pdf.text(lines, x, y); return y + lines.length * lineHeight;
+}
+
+function downloadPdfReport(account) {
+  const report = buildReportData(account);
+  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth(); const pageHeight = pdf.internal.pageSize.getHeight(); const margin = 16; const contentWidth = pageWidth - margin * 2; let y = 18;
+
+  pdf.setFillColor(15, 23, 42); pdf.rect(0, 0, pageWidth, 43, "F"); pdf.setTextColor(255, 255, 255); pdf.setFont("helvetica", "bold"); pdf.setFontSize(18); pdf.text("SICSI · Relatório de Segurança", margin, 18); pdf.setFontSize(9); pdf.text("Síntese das experiências de phishing", margin, 25); pdf.setFont("helvetica", "normal"); pdf.text(`Conta: ${report.account}`, margin, 32); pdf.text(`Gerado: ${report.generatedAt.toLocaleString("pt-PT")}`, margin, 38);
+  y = 53; pdf.setTextColor(15, 23, 42); pdf.setFont("helvetica", "bold"); pdf.setFontSize(12); pdf.text("Resumo executivo", margin, y); y += 7; y = drawWrappedText(pdf, "O relatório sintetiza decisões relevantes e os principais feedbacks recebidos nas cinco experiências de phishing. Não reproduz credenciais, códigos de autenticação nem uma cronologia exaustiva de interacções.", margin, y, contentWidth, { size: 9, lineHeight: 5 }); y += 5;
+
+  const cardWidth = (contentWidth - 6) / 3; [["Experiências", "05"], ["Feedbacks positivos", String(report.positive)], ["Feedbacks de risco", String(report.negative)]].forEach(([label, value], index) => { const x = margin + index * (cardWidth + 3); pdf.setDrawColor(226, 232, 240); pdf.setFillColor(248, 250, 252); pdf.roundedRect(x, y, cardWidth, 20, 3, 3, "FD"); pdf.setFont("helvetica", "bold"); pdf.setFontSize(7); pdf.setTextColor(100, 116, 139); pdf.text(label.toUpperCase(), x + 4, y + 7); pdf.setFontSize(13); pdf.setTextColor(15, 23, 42); pdf.text(value, x + 4, y + 15); }); y += 30;
+
+  report.simulations.forEach((simulation) => { if (y > pageHeight - 35) { pdf.addPage(); y = 18; } pdf.setFont("helvetica", "bold"); pdf.setFontSize(11); pdf.setTextColor(15, 23, 42); pdf.text(`Simulação ${simulation.id.split("-")[1]} · ${simulation.label}`, margin, y); y += 6; if (simulation.relevant.length === 0) { y = drawWrappedText(pdf, "Sem decisões críticas adicionais disponíveis para sintetizar nesta experiência.", margin, y, contentWidth, { size: 8.5, lineHeight: 4.6 }); } else { simulation.relevant.forEach((item) => { if (y > pageHeight - 30) { pdf.addPage(); y = 18; } const safe = item.outcome === "positive"; pdf.setFillColor(...(safe ? [236, 253, 245] : [254, 242, 242])); pdf.setDrawColor(...(safe ? [167, 243, 208] : [252, 165, 165])); pdf.roundedRect(margin, y, contentWidth, 21, 3, 3, "FD"); pdf.setFont("helvetica", "bold"); pdf.setFontSize(8); pdf.setTextColor(...(safe ? [6, 95, 70] : [153, 27, 27])); pdf.text(safe ? "FEEDBACK POSITIVO" : "FEEDBACK DE RISCO", margin + 4, y + 6); pdf.setTextColor(15, 23, 42); pdf.text(item.label, margin + 4, y + 11); drawWrappedText(pdf, item.feedback, margin + 4, y + 16, contentWidth - 8, { size: 7.5, lineHeight: 4, colour: [71, 85, 105] }); y += 25; }); } y += 3; });
+  if (y > pageHeight - 28) { pdf.addPage(); y = 18; } pdf.setDrawColor(226, 232, 240); pdf.line(margin, y, pageWidth - margin, y); y += 7; pdf.setFont("helvetica", "bold"); pdf.setFontSize(9); pdf.setTextColor(30, 41, 59); pdf.text("Síntese final", margin, y); y += 5; drawWrappedText(pdf, "As experiências foram desenhadas para desenvolver a capacidade de reconhecer sinais, validar contexto, evitar decisões sob pressão e responder de forma segura a incidentes envolvendo contas e informação institucional.", margin, y, contentWidth, { size: 8.5, lineHeight: 4.8 });
+  pdf.save("SICSI_Relatorio_Seguranca_Phishing.pdf");
+}
+
+export default function Phishing05Page() {
+  const navigate = useNavigate(); const { user } = useAuth(); const accountEmail = getAccountEmail(user);
+  const [state, setState] = useState(STATES.HOME); const [reviewed, setReviewed] = useState({ activity: false, devices: false, security: false, session: false }); const [lastDecision, setLastDecision] = useState(null); const [lastOutcome, setLastOutcome] = useState(null); const [events, setEvents] = useState([]); const [startedAt, setStartedAt] = useState(Date.now()); const [elapsed, setElapsed] = useState(0); const [sessionReady, setSessionReady] = useState(false);
+  const reviewedCount = useMemo(() => Object.values(reviewed).filter(Boolean).length, [reviewed]);
+
+  useEffect(() => { const current = getCurrentSimulation(); if (current && current.simulation_id === SIMULATION.id && !current.completed) { setStartedAt(current.started_at ? new Date(current.started_at).getTime() : Date.now()); } else { const session = startSimulation({ area: SIMULATION.area, simulationId: SIMULATION.id, simulationNumber: SIMULATION.number, initialState: STATES.HOME }); setStartedAt(session?.started_at ? new Date(session.started_at).getTime() : Date.now()); registerAction({ action: "simulation_started", nextState: STATES.HOME, interactionType: "system", metadata: { simulation_id: SIMULATION.id, simulation_number: SIMULATION.number, title: SIMULATION.title } }); } setSessionReady(true); }, []);
+  useEffect(() => { if (!sessionReady) return undefined; const timer = window.setInterval(() => setElapsed(Date.now() - startedAt), 1000); return () => window.clearInterval(timer); }, [sessionReady, startedAt]);
+  useEffect(() => { if (!sessionReady) return undefined; const timer = window.setTimeout(() => { try { const stored = JSON.parse(localStorage.getItem("sicsi_simulation_events") || "[]"); const session = getCurrentSimulation(); if (session?.session_id) setEvents(stored.filter((event) => event.session_id === session.session_id)); } catch { setEvents([]); } }, 40); return () => window.clearTimeout(timer); }, [state, sessionReady]);
+
+  function track(action, nextState, interactionType = "interaction", metadata = {}) { const result = registerAction({ action, nextState, interactionType, metadata }); if (result?.event) setEvents((current) => [...current, result.event]); return result; }
+  function go(nextState, action, metadata = {}) { track(action, nextState, "navigation", metadata); setState(nextState); }
+  function startIncident() { go(STATES.ALERT, "open_security_alert"); }
+  function investigateAlert() { track("investigate_alert", STATES.CENTER, "decision", { report_relevant: true, safe: true, feedback: "Investigar antes de decidir reduziu a pressão e criou espaço para validar evidências.", feedback_title: "Boa prática: investigar antes de agir", decision_label: "Investigou o alerta antes de decidir" }); setState(STATES.CENTER); }
+  function ignoreAlert() { const feedback = "Ignorar um alerta sem validar a origem mantém o cenário de risco aberto."; track("ignore_security_alert", STATES.CONSEQUENCE, "decision", { report_relevant: true, safe: false, feedback, feedback_title: "Decisão de risco: alerta ignorado", decision_label: "Ignorou o alerta de segurança" }); setLastDecision("Ignorou o alerta de segurança"); setLastOutcome({ safe: false, title: "O alerta foi ignorado sem validação.", description: "A simulação mantém o cenário de risco activo porque a decisão foi tomada sem confirmar a legitimidade da actividade.", feedback }); setState(STATES.CONSEQUENCE); }
+  function openEvidence(type) { const actionMap = { activity: "review_activity", devices: "review_devices", security: "review_security_changes", session: "review_session" }; const stateMap = { activity: STATES.ACTIVITY, devices: STATES.DEVICES, security: STATES.SECURITY_CHANGES, session: STATES.SESSION_DETAIL }; track(actionMap[type], stateMap[type], "navigation", { evidence_type: type }); setState(stateMap[type]); }
+  function markEvidence(type) { const actionMap = { activity: "review_activity", devices: "review_devices", security: "review_security_changes", session: "review_session" }; setReviewed((current) => ({ ...current, [type]: true })); track(actionMap[type], STATES.CENTER, "security_review", { evidence_type: type, evidence_reviewed: true, report_relevant: false }); setState(STATES.CENTER); }
+  function makeSafeDecision() { const decision = "Bloqueou a sessão desconhecida"; const feedback = reviewedCount >= 2 ? "A decisão combinou investigação com contenção. Mesmo sem certeza absoluta, revogar uma sessão não reconhecida reduz a superfície de ataque." : "A decisão foi defensiva, mas uma investigação com mais evidências teria fortalecido a validação antes da resposta."; track("block_unknown_session", STATES.CONSEQUENCE, "decision", { report_relevant: true, safe: true, feedback, feedback_title: "Decisão segura: contenção do acesso", decision_label: decision, evidence_count: reviewedCount }); setLastDecision(decision); setLastOutcome({ safe: true, title: "A sessão desconhecida foi colocada em contenção.", description: "A decisão reduziu a exposição imediata e criou condições para uma resposta segura ao incidente.", feedback }); setState(STATES.CONSEQUENCE); }
+  function makeRiskDecision() { const decision = "Manteve a sessão desconhecida activa"; const feedback = "Manter uma sessão não reconhecida sem contenção prolonga a exposição e dá mais tempo a um possível atacante para actuar."; track("keep_unknown_session", STATES.CONSEQUENCE, "decision", { report_relevant: true, safe: false, feedback, feedback_title: "Decisão de risco: sessão mantida", decision_label: decision, evidence_count: reviewedCount }); setLastDecision(decision); setLastOutcome({ safe: false, title: "A sessão suspeita permaneceu activa.", description: "A ausência de contenção manteve o cenário exposto e obrigou a uma resposta adicional.", feedback }); setState(STATES.CONSEQUENCE); }
+  function continueFromConsequence() { track(lastOutcome?.safe ? "secure_account" : "confirm_unverified_activity", STATES.RESPONSE, "navigation", { report_relevant: !lastOutcome?.safe, safe: Boolean(lastOutcome?.safe) }); setState(STATES.RESPONSE); }
+  function secureResponse() { track("finish_secure_response", STATES.RESPONSE_PROCESSING, "decision", { report_relevant: true, safe: true, feedback: "Encerrar a sessão suspeita e reforçar a conta fecha o ciclo de resposta em vez de parar na simples detecção.", feedback_title: "Boa resposta: contenção e protecção", decision_label: "Protegeu a conta e encerrou a sessão suspeita" }); setState(STATES.RESPONSE_PROCESSING); window.setTimeout(() => { setLastOutcome({ safe: true, title: "Resposta concluída com contenção.", description: "A conta foi protegida, a sessão suspeita foi encerrada e o percurso ficou preparado para o fecho da experiência.", feedback: "A resposta combinou detecção, contenção e recuperação do controlo." }); setState(STATES.RESPONSE_RESULT); }, 800); }
+  function riskyResponse() { track("continue_without_protection", STATES.RESPONSE_RESULT, "decision", { report_relevant: true, safe: false, feedback: "Continuar sem reforçar a protecção mantém a conta dependente de sinais futuros, em vez de reduzir activamente a exposição.", feedback_title: "Resposta insuficiente: protecção adiada", decision_label: "Continuou sem reforçar as protecções" }); setLastOutcome({ safe: false, title: "A resposta foi concluída sem reforço de protecção.", description: "A conta continua exposta a uma sessão que já apresentou sinais de anomalia.", feedback: "Em incidentes de conta, detectar sem conter pode não ser suficiente." }); setState(STATES.RESPONSE_RESULT); }
+  function downloadReport() { track("download_general_report", STATES.RESPONSE_RESULT, "download", { format: "pdf", report_scope: "phishing_01_to_05", report_relevant: false }); downloadPdfReport(accountEmail); }
+  function finalizeSimulation() { track("complete_simulation", STATES.RESPONSE_RESULT, "navigation", { report_relevant: false, safe: lastOutcome?.safe, feedback: "A experiência foi concluída e integrada no percurso geral de phishing." }); completeSimulation(); completeSimulationSession(); navigate("/student/simulacoes"); }
+  function renderState() {
+    if (state === STATES.HOME) return <AcademicHomeView account={accountEmail} onStart={startIncident} />;
+    if (state === STATES.ALERT) return <AlertView account={accountEmail} onInvestigate={investigateAlert} onIgnore={ignoreAlert} onBack={() => setState(STATES.HOME)} />;
+    if (state === STATES.CENTER) return <IncidentCenterView reviewed={reviewed} onEvidence={openEvidence} onDecision={() => setState(STATES.DECISION)} onBack={() => setState(STATES.ALERT)} />;
+    if (state === STATES.ACTIVITY) return <EvidenceView type="activity" onBack={() => setState(STATES.CENTER)} onNext={() => markEvidence("activity")} />;
+    if (state === STATES.DEVICES) return <EvidenceView type="devices" onBack={() => setState(STATES.CENTER)} onNext={() => markEvidence("devices")} />;
+    if (state === STATES.SECURITY_CHANGES) return <EvidenceView type="security" onBack={() => setState(STATES.CENTER)} onNext={() => markEvidence("security")} />;
+    if (state === STATES.SESSION_DETAIL) return <EvidenceView type="session" onBack={() => setState(STATES.CENTER)} onNext={() => markEvidence("session")} />;
+    if (state === STATES.DECISION) return <DecisionView reviewed={reviewed} onSafe={makeSafeDecision} onRisk={makeRiskDecision} onBack={() => setState(STATES.CENTER)} />;
+    if (state === STATES.CONSEQUENCE) return <ConsequenceView safe={Boolean(lastOutcome?.safe)} title={lastOutcome?.title || "Decisão registada"} description={lastOutcome?.description || ""} decisionLabel={lastDecision || "Decisão registada"} onContinue={continueFromConsequence} onBack={() => setState(STATES.DECISION)} />;
+    if (state === STATES.RESPONSE) return <ResponseView safePath={Boolean(lastOutcome?.safe)} onSecure={secureResponse} onRisky={riskyResponse} onBack={() => setState(STATES.CONSEQUENCE)} />;
+    if (state === STATES.RESPONSE_PROCESSING) return <ResponseProcessingView />;
+    if (state === STATES.RESPONSE_RESULT) return <ResponseResultView safe={Boolean(lastOutcome?.safe)} onComplete={finalizeSimulation} onDownload={downloadReport} />;
+    return <AcademicHomeView account={accountEmail} onStart={startIncident} />;
+  }
+
+  if (!sessionReady) return <Shell title="Conta académica"><main className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4"><div className="text-center"><RefreshCw size={25} className="mx-auto animate-spin text-blue-700" /><div className="mt-4 text-sm font-semibold text-slate-500">A preparar a simulação...</div></div></main></Shell>;
+  return renderState();
+}

@@ -1,0 +1,575 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Award,
+  Check,
+  CheckCircle2,
+  Circle,
+  Lightbulb,
+  RotateCcw,
+  ShieldCheck,
+  XCircle,
+} from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { courseService } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+
+export default function CourseTestPage() {
+  const { courseId } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [course, setCourse] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCourse() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const data = await courseService.getCourse(courseId);
+
+        if (active) {
+          setCourse(data);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err.message || "Não foi possível carregar o teste.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadCourse();
+
+    return () => {
+      active = false;
+    };
+  }, [courseId]);
+
+  const questions = useMemo(
+    () => (Array.isArray(course?.questions) ? course.questions : []),
+    [course]
+  );
+
+  const currentQuestion = questions[currentIndex] || null;
+
+  const answeredCount = Object.keys(answers).length;
+  const progress = questions.length
+    ? Math.round((answeredCount / questions.length) * 100)
+    : 0;
+
+  const currentAnswered =
+    currentQuestion && Boolean(answers[currentQuestion.id]);
+
+  function selectAnswer(optionId) {
+    if (!currentQuestion || submitting) {
+      return;
+    }
+
+    setAnswers((previous) => ({
+      ...previous,
+      [currentQuestion.id]: optionId,
+    }));
+
+    setError("");
+  }
+
+  function goPrevious() {
+    if (currentIndex > 0) {
+      setCurrentIndex((index) => index - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function goNext() {
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex((index) => index + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  async function submit() {
+    if (answeredCount !== questions.length) {
+      setError(
+        `Ainda faltam ${questions.length - answeredCount} pergunta${
+          questions.length - answeredCount !== 1 ? "s" : ""
+        }. Responda a todas antes de concluir.`
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const orderedAnswers = questions.map(
+        (question) => answers[question.id]
+      );
+
+      const data = await courseService.submitTest(courseId, {
+        user_id: user.id,
+        answers: orderedAnswers,
+      });
+
+      setResult(data);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setError(err.message || "Não foi possível avaliar o teste.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-[70vh] bg-slate-50 px-4 py-8 sm:px-6">
+        <div className="mx-auto max-w-4xl animate-pulse">
+          <div className="h-5 w-40 rounded bg-slate-200" />
+          <div className="mt-6 h-28 rounded-3xl bg-white" />
+          <div className="mt-6 h-[420px] rounded-3xl bg-white" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !course) {
+    return (
+      <div className="min-h-[70vh] bg-slate-50 px-4 py-10 sm:px-6">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-red-200 bg-white p-8 text-center shadow-sm">
+          <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
+          <h1 className="mt-4 text-2xl font-black text-slate-950">
+            Não foi possível carregar o teste
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">{error}</p>
+          <Link
+            to={`/student/cursos/${courseId}`}
+            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white"
+          >
+            <ArrowLeft size={16} />
+            Voltar ao curso
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!course || questions.length === 0) {
+    return (
+      <div className="min-h-[70vh] bg-slate-50 px-4 py-10 sm:px-6">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <ShieldCheck className="mx-auto h-12 w-12 text-blue-600" />
+          <h1 className="mt-4 text-2xl font-black text-slate-950">
+            Teste indisponível
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Este curso ainda não possui perguntas para o teste final.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (result) {
+    const passed = Boolean(result.passed);
+
+    return (
+      <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl">
+          <div
+            className={`overflow-hidden rounded-[2rem] border bg-white shadow-sm ${
+              passed ? "border-emerald-200" : "border-amber-200"
+            }`}
+          >
+            <div
+              className={`px-6 py-10 text-center sm:px-10 ${
+                passed
+                  ? "bg-gradient-to-br from-emerald-50 to-blue-50"
+                  : "bg-gradient-to-br from-amber-50 to-blue-50"
+              }`}
+            >
+              <div
+                className={`mx-auto flex h-20 w-20 items-center justify-center rounded-3xl shadow-sm ${
+                  passed
+                    ? "bg-emerald-100 text-emerald-600"
+                    : "bg-amber-100 text-amber-600"
+                }`}
+              >
+                {passed ? <Award size={42} /> : <RotateCcw size={38} />}
+              </div>
+
+              <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
+                Resultado do teste final
+              </p>
+
+              <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+                {passed
+                  ? "Parabéns, concluiu o curso!"
+                  : "Ainda não atingiu os 70%"}
+              </h1>
+
+              <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                {result.message}
+              </p>
+
+              <div className="mx-auto mt-7 flex h-32 w-32 items-center justify-center rounded-full bg-white shadow-sm ring-8 ring-white/60">
+                <div className="text-center">
+                  <p className="text-4xl font-black text-slate-950">
+                    {result.percentage}%
+                  </p>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    resultado
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 sm:p-8">
+              {result.certificate && (
+                <div className="flex flex-col gap-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-xl bg-white p-3 text-blue-600 shadow-sm">
+                      <Award size={23} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                        Certificado gerado
+                      </p>
+                      <h2 className="mt-1 font-black text-slate-950">
+                        {result.certificate.course_title}
+                      </h2>
+                      <p className="mt-1 font-mono text-xs text-slate-500">
+                        {result.certificate.certificate_code}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Link
+                    to="/student/certificados"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+                  >
+                    Ver certificado
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
+              )}
+
+              {!passed && (
+                <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                  <p className="font-bold text-amber-900">
+                    O que fazer agora?
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-amber-800">
+                    Reveja as aulas, consulte o feedback abaixo e tente
+                    novamente. O objectivo é aprender, não apenas passar.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-8">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                      Revisão
+                    </p>
+                    <h2 className="mt-1 text-xl font-black text-slate-950">
+                      Feedback das respostas
+                    </h2>
+                  </div>
+
+                  <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">
+                    {result.feedback?.filter((item) => item.correct).length || 0}/
+                    {result.feedback?.length || questions.length} correctas
+                  </span>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {(result.feedback || []).map((item, index) => (
+                    <div
+                      key={item.question_id}
+                      className="rounded-2xl border border-slate-200 bg-white p-5"
+                    >
+                      <div className="flex gap-4">
+                        <div
+                          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                            item.correct
+                              ? "bg-emerald-50 text-emerald-600"
+                              : "bg-red-50 text-red-500"
+                          }`}
+                        >
+                          {item.correct ? (
+                            <Check size={18} />
+                          ) : (
+                            <XCircle size={18} />
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-slate-900">
+                            Pergunta {index + 1}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-700">
+                            {item.correct
+                              ? "Resposta correcta."
+                              : "Resposta incorrecta."}
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-slate-500">
+                            {item.explanation}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link
+                  to={`/student/cursos/${courseId}`}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  <ArrowLeft size={16} />
+                  Voltar ao curso
+                </Link>
+
+                {!passed && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAnswers({});
+                      setResult(null);
+                      setCurrentIndex(0);
+                      setError("");
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700"
+                  >
+                    <RotateCcw size={16} />
+                    Tentar novamente
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <Link
+          to={`/student/cursos/${courseId}`}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-600"
+        >
+          <ArrowLeft size={16} />
+          Voltar ao curso
+        </Link>
+
+        <section className="mt-5 overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-5 p-5 sm:p-6 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+                <ShieldCheck size={25} />
+              </div>
+
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-slate-950 sm:text-base">
+                  {course.title}
+                </p>
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                  Teste final · {questions.length} perguntas · aprovação ≥70%
+                </p>
+              </div>
+            </div>
+
+            <span className="shrink-0 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">
+              {answeredCount}/{questions.length} respondidas
+            </span>
+          </div>
+
+          <div className="border-t border-slate-100 px-5 py-4 sm:px-6">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-700">
+                Progresso do teste
+              </span>
+              <span className="font-bold text-blue-600">{progress}%</span>
+            </div>
+
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        </section>
+
+        {error && (
+          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+            <AlertCircle className="mt-0.5 shrink-0 text-amber-600" size={19} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <main className="mt-5">
+          <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+            <div className="flex items-center justify-between gap-4">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-black text-blue-700">
+                <span>Pergunta {currentIndex + 1}</span>
+                <span className="text-blue-300">/</span>
+                <span>{questions.length}</span>
+              </div>
+
+              <span className="text-xs font-semibold text-slate-400">
+                {currentAnswered ? "Respondida" : "Por responder"}
+              </span>
+            </div>
+
+            <h1 className="mt-7 max-w-3xl text-2xl font-black leading-tight tracking-tight text-slate-950 sm:text-3xl">
+              {currentQuestion.question}
+            </h1>
+
+            <p className="mt-3 text-sm text-slate-500">
+              Seleccione a resposta que considera mais segura.
+            </p>
+
+            <div className="mt-7 space-y-3">
+              {currentQuestion.options.map((option, optionIndex) => {
+                const selected = answers[currentQuestion.id] === option.id;
+                const letter = String.fromCharCode(65 + optionIndex);
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => selectAnswer(option.id)}
+                    className={`group flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition duration-200 sm:p-5 ${
+                      selected
+                        ? "border-blue-500 bg-blue-50 shadow-sm"
+                        : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-black ${
+                        selected
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600"
+                      }`}
+                    >
+                      {selected ? <Check size={18} /> : letter}
+                    </span>
+
+                    <span
+                      className={`flex-1 text-sm font-semibold leading-6 ${
+                        selected ? "text-blue-950" : "text-slate-700"
+                      }`}
+                    >
+                      {option.text}
+                    </span>
+
+                    <Circle
+                      size={20}
+                      className={
+                        selected ? "text-blue-600" : "text-slate-200"
+                      }
+                      fill={selected ? "currentColor" : "none"}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-8 flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                onClick={goPrevious}
+                disabled={currentIndex === 0}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ArrowLeft size={17} />
+                Anterior
+              </button>
+
+              {currentIndex < questions.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  Seguinte
+                  <ArrowRight size={17} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={submitting}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submitting ? "A avaliar..." : "Concluir teste"}
+                  <CheckCircle2 size={17} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {questions.map((question, index) => {
+              const answered = Boolean(answers[question.id]);
+              const active = index === currentIndex;
+
+              return (
+                <button
+                  key={question.id}
+                  type="button"
+                  onClick={() => {
+                    setCurrentIndex(index);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  aria-label={`Ir para pergunta ${index + 1}`}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-black transition ${
+                    active
+                      ? "bg-blue-600 text-white shadow-md"
+                      : answered
+                        ? "border border-blue-200 bg-blue-50 text-blue-700"
+                        : "border border-slate-200 bg-white text-slate-500 hover:border-blue-200"
+                  }`}
+                >
+                  {index + 1}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-6 flex items-start gap-4 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+            <div className="rounded-xl bg-white p-2.5 text-blue-600 shadow-sm">
+              <Lightbulb size={21} />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-950">Dica de segurança</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">
+                Em segurança digital, pare, verifique e só depois tome uma
+                decisão. A pressa é frequentemente explorada por atacantes.
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}

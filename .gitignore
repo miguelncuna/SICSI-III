@@ -1,0 +1,33 @@
+# SICSI III - ficheiros locais e dependencias
+# Dependencias e builds
+node_modules/
+frontend/dist/
+frontend/.vite/
+backend/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.vite/
+
+# Credenciais e configuracoes privadas
+.env
+.env.*
+!.env.example
+!**/.env.example
+# Dados locais de utilizadores e resultados
+backend/data/users.json
+backend/data/certificates.json
+backend/data/sessions.json
+backend/data/progress.json
+backend/data/simulation_results.json
+backend/data/assessment_results.json
+backend/data/secrets.json
+# Ficheiros privados ou gerados
+*.log
+*.db
+*.sqlite*
+*.pem
+*.key
+*.p12
+*.pfx

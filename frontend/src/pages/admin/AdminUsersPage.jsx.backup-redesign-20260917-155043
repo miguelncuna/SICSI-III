@@ -1,0 +1,444 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import {
+  Search,
+  UserPlus,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+
+const API = "http://127.0.0.1:8000/api";
+
+async function api(url, options = {}) {
+  const response = await fetch(`${API}${url}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Operação não concluída."
+    );
+  }
+
+  return data;
+}
+
+function initials(name) {
+  return String(name || "U")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((item) => item[0]?.toUpperCase())
+    .join("");
+}
+
+function formatDate(value) {
+  if (!value) return "—";
+
+  try {
+    return new Date(value).toLocaleDateString("pt-PT");
+  } catch {
+    return value;
+  }
+}
+
+export default function AdminUsersPage() {
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("all");
+  const [loading, setLoading] = useState(true);
+
+  const [notice, setNotice] = useState({
+    type: "",
+    text: "",
+  });
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+
+  async function load() {
+    setLoading(true);
+
+    try {
+      const data = await api("/users");
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return users.filter((item) => {
+      const matchesSearch =
+        !query ||
+        String(item.name || "")
+          .toLowerCase()
+          .includes(query) ||
+        String(item.email || "")
+          .toLowerCase()
+          .includes(query);
+
+      const matchesRole =
+        role === "all" || item.role === role;
+
+      return matchesSearch && matchesRole;
+    });
+  }, [users, search, role]);
+
+  async function createUser(event) {
+    event.preventDefault();
+
+    if (
+      !form.name.trim() ||
+      !form.email.trim() ||
+      form.password.length < 6
+    ) {
+      setNotice({
+        type: "error",
+        text: "Preencha nome, email e uma palavra-passe com pelo menos 6 caracteres.",
+      });
+
+      return;
+    }
+
+    setCreating(true);
+
+    try {
+      await api("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          password: form.password,
+        }),
+      });
+
+      setForm({
+        name: "",
+        email: "",
+        password: "",
+      });
+
+      setModalOpen(false);
+
+      setNotice({
+        type: "success",
+        text: "Utilizador criado com sucesso.",
+      });
+
+      await load();
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text: error.message,
+      });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function toggleRole(item) {
+    const nextRole =
+      item.role === "admin"
+        ? "student"
+        : "admin";
+
+    const question =
+      nextRole === "admin"
+        ? `Promover "${item.name}" a administrador?`
+        : `Remover a função de administrador de "${item.name}"?`;
+
+    if (!window.confirm(question)) {
+      return;
+    }
+
+    try {
+      await api(`/users/${item.id}/role`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          role: nextRole,
+        }),
+      });
+
+      setNotice({
+        type: "success",
+        text:
+          nextRole === "admin"
+            ? "Utilizador promovido a administrador."
+            : "Função de administrador removida.",
+      });
+
+      await load();
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text: error.message,
+      });
+    }
+  }
+
+  return (
+    <main className="min-h-[calc(100vh-64px)] p-5 sm:p-8">
+      <div className="mx-auto max-w-[1500px]">
+        <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">
+              Administração
+            </p>
+
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+              Utilizadores
+            </h1>
+
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Consulte contas e controle as funções administrativas.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700"
+          >
+            <UserPlus size={17} />
+            Novo utilizador
+          </button>
+        </div>
+
+        {notice.text && (
+          <div
+            className={`mt-6 rounded-2xl border px-4 py-3 text-sm font-semibold ${
+              notice.type === "error"
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {notice.text}
+          </div>
+        )}
+
+        <section className="mt-7 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row">
+            <div className="relative flex-1">
+              <Search
+                size={17}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Pesquisar por nome ou email..."
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-semibold outline-none focus:border-blue-400 focus:bg-white"
+              />
+            </div>
+
+            <select
+              value={role}
+              onChange={(event) =>
+                setRole(event.target.value)
+              }
+              className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 outline-none"
+            >
+              <option value="all">Todas as funções</option>
+              <option value="student">Estudantes</option>
+              <option value="admin">Administradores</option>
+            </select>
+          </div>
+
+          {loading ? (
+            <div className="p-8 text-sm font-semibold text-slate-400">
+              A carregar utilizadores...
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="p-10 text-center">
+              <Users className="mx-auto text-slate-300" size={38} />
+              <p className="mt-3 text-sm font-black text-slate-700">
+                Nenhum utilizador encontrado
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-[850px] w-full">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left text-[11px] font-black uppercase tracking-wider text-slate-400">
+                    <th className="px-5 py-4">Utilizador</th>
+                    <th className="px-5 py-4">Função</th>
+                    <th className="px-5 py-4">Criado em</th>
+                    <th className="px-5 py-4 text-right">
+                      Acção
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredUsers.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                    >
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-xs font-black text-blue-700">
+                            {initials(item.name)}
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-black text-slate-900">
+                              {item.name || "Sem nome"}
+                            </p>
+
+                            <p className="text-xs font-semibold text-slate-500">
+                              {item.email || "—"}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1.5 text-xs font-black ${
+                            item.role === "admin"
+                              ? "bg-violet-50 text-violet-700"
+                              : "bg-blue-50 text-blue-700"
+                          }`}
+                        >
+                          {item.role === "admin"
+                            ? "Administrador"
+                            : "Estudante"}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-4 text-xs font-semibold text-slate-500">
+                        {formatDate(item.created_at)}
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => toggleRole(item)}
+                          className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-black ${
+                            item.role === "admin"
+                              ? "bg-red-50 text-red-600 hover:bg-red-100"
+                              : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          }`}
+                        >
+                          <ShieldCheck size={14} />
+
+                          {item.role === "admin"
+                            ? "Remover admin"
+                            : "Promover admin"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 p-4">
+          <form
+            onSubmit={createUser}
+            className="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl"
+          >
+            <p className="text-xs font-black uppercase tracking-wider text-blue-600">
+              Novo utilizador
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black text-slate-950">
+              Criar conta
+            </h2>
+
+            <div className="mt-6 space-y-4">
+              <input
+                value={form.name}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    name: event.target.value,
+                  })
+                }
+                placeholder="Nome completo"
+                className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-blue-400"
+              />
+
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    email: event.target.value,
+                  })
+                }
+                placeholder="Email"
+                className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-blue-400"
+              />
+
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    password: event.target.value,
+                  })
+                }
+                placeholder="Palavra-passe"
+                className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-blue-400"
+              />
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                disabled={creating}
+                className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+              >
+                {creating ? "A criar..." : "Criar utilizador"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </main>
+  );
+}

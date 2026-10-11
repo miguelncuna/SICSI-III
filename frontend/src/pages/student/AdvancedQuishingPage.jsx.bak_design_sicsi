@@ -1,0 +1,792 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ExternalLink,
+  Mail,
+  ScanLine,
+  ShieldAlert,
+  ShieldCheck,
+  Smartphone,
+  LogOut,
+} from "lucide-react";
+import { simulationService } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+
+function QrVisual() {
+  const cells = useMemo(() => {
+    const result = [];
+
+    for (let row = 0; row < 21; row += 1) {
+      for (let col = 0; col < 21; col += 1) {
+        let filled =
+          ((row * 17 + col * 31 + row * col * 7) % 11) < 5;
+
+        const finder = (r, c) => {
+          const inside =
+            row >= r &&
+            row < r + 7 &&
+            col >= c &&
+            col < c + 7;
+
+          if (!inside) return null;
+
+          const edge =
+            row === r ||
+            row === r + 6 ||
+            col === c ||
+            col === c + 6;
+
+          const centre =
+            row >= r + 2 &&
+            row <= r + 4 &&
+            col >= c + 2 &&
+            col <= c + 4;
+
+          return edge || centre;
+        };
+
+        const a = finder(0, 0);
+        const b = finder(0, 14);
+        const c = finder(14, 0);
+
+        if (a !== null) filled = a;
+        if (b !== null) filled = b;
+        if (c !== null) filled = c;
+
+        result.push({
+          key: `${row}-${col}`,
+          filled,
+        });
+      }
+    }
+
+    return result;
+  }, []);
+
+  return (
+    <div className="grid grid-cols-[repeat(21,minmax(0,1fr))] gap-[2px] rounded-2xl bg-white p-3 shadow-inner">
+      {cells.map((cell) => (
+        <span
+          key={cell.key}
+          className={`aspect-square rounded-[1px] ${
+            cell.filled ? "bg-slate-950" : "bg-white"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+export default function AdvancedQuishingPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [simulation, setSimulation] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState("email");
+  const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    simulationService
+      .get("phishing-02")
+      .then((data) => {
+        if (active) {
+          setSimulation(data);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setMessage(
+            error?.message ||
+              "Não foi possível carregar a experiência."
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function act(
+    action,
+    stepId,
+    interactionType,
+    details = {}
+  ) {
+    try {
+      setSubmitting(true);
+      setMessage("");
+
+      const result = await simulationService.evaluate(
+        "phishing-02",
+        action,
+        user?.id,
+        stepId,
+        interactionType,
+        details
+      );
+
+      if (result?.completed) {
+        navigate(
+          "/student/simulacoes/phishing-02/resultado"
+        );
+        return;
+      }
+
+      if (action === "open_link") {
+        if (step === "email") {
+          setStep("mobile");
+        } else if (step === "mobile") {
+          setStep("login");
+        }
+      }
+
+      if (action === "inspect" || action === "inspect_url") {
+        setMessage(
+          "A informação foi analisada e o percurso permanece disponível."
+        );
+      }
+
+      if (action === "leave_page") {
+        setStep("safe_exit");
+        setMessage(
+          "O ambiente permanece disponível para que possa concluir a experiência."
+        );
+      }
+    } catch (error) {
+      setMessage(
+        error?.message ||
+          "Não foi possível registar esta decisão."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitCredentials(event) {
+    event.preventDefault();
+
+    try {
+      setSubmitting(true);
+      setMessage("");
+
+      const result = await simulationService.evaluate(
+        "phishing-02",
+        "credentials",
+        user?.id,
+        "step_03",
+        "credentials",
+        {
+          email_value: email,
+        }
+      );
+
+      if (result?.completed) {
+        navigate(
+          "/student/simulacoes/phishing-02/resultado"
+        );
+        return;
+      }
+
+      setStep("consequence");
+    } catch (error) {
+      setMessage(
+        error?.message ||
+          "Não foi possível concluir a acção."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function finish() {
+    act(
+      "finish",
+      "step_04",
+      "finish"
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+          <p className="mt-4 text-sm text-slate-500">
+            A preparar a experiência...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!simulation) {
+    return (
+      <div className="mx-auto max-w-2xl p-8 text-center">
+        <ShieldAlert className="mx-auto h-10 w-10 text-red-500" />
+        <h1 className="mt-5 text-2xl font-black text-slate-950">
+          Experiência indisponível
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">
+          {message ||
+            "Não foi possível carregar o Phishing 02."}
+        </p>
+      </div>
+    );
+  }
+
+  const mobile = simulation.mobile || {};
+  const login = simulation.login || {};
+
+  return (
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+
+        <button
+          type="button"
+          onClick={() =>
+            navigate("/student/simulacoes")
+          }
+          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-600"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar às simulações
+        </button>
+
+        <div className="mt-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">
+              {simulation.category}
+            </p>
+
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+              {simulation.title}
+            </h1>
+
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
+              {simulation.context}
+            </p>
+          </div>
+
+          <div className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-red-700">
+            {simulation.difficulty}
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+
+          <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/40">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-5 py-4 text-white">
+              <div className="flex items-center gap-3">
+                {step === "email" ? (
+                  <Mail className="h-5 w-5 text-blue-400" />
+                ) : (
+                  <Smartphone className="h-5 w-5 text-blue-400" />
+                )}
+
+                <div>
+                  <p className="font-black">
+                    {step === "email"
+                      ? "Caixa de entrada"
+                      : step === "mobile"
+                        ? "Navegador móvel"
+                        : step === "login"
+                          ? "Portal do Estudante"
+                          : "Ambiente simulado"}
+                  </p>
+
+                  <p className="text-xs text-slate-400">
+                    Experiência SICSI III
+                  </p>
+                </div>
+              </div>
+
+              <span className="rounded-full border border-slate-700 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Interacção activa
+              </span>
+            </div>
+
+            {step === "email" && (
+              <div className="p-6 sm:p-8">
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                      <Mail className="h-5 w-5" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                        Remetente
+                      </p>
+
+                      <p className="mt-2 break-all text-sm font-bold text-slate-900">
+                        {simulation.sender}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 border-t border-slate-200 pt-5">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                      Assunto
+                    </p>
+
+                    <p className="mt-2 text-xl font-black text-slate-950">
+                      {simulation.subject}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+                  <p className="text-sm leading-7 text-slate-700">
+                    {simulation.message}
+                  </p>
+
+                  <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() =>
+                        act(
+                          "inspect",
+                          "step_01",
+                          "inspect"
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-blue-400 hover:text-blue-700 disabled:opacity-50"
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      Analisar a mensagem
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() =>
+                        act(
+                          "report",
+                          "step_01",
+                          "report"
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      <ShieldAlert className="h-4 w-4" />
+                      Denunciar
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() =>
+                        act(
+                          "open_link",
+                          "step_01",
+                          "link"
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <ScanLine className="h-4 w-4" />
+                      {simulation.link_text}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === "mobile" && (
+              <div className="bg-slate-100 p-6 sm:p-8">
+                <div className="mx-auto max-w-md overflow-hidden rounded-[2rem] border-8 border-slate-900 bg-white shadow-2xl">
+                  <div className="flex items-center justify-between bg-slate-950 px-5 py-3 text-xs text-white">
+                    <span>09:41</span>
+                    <span>Portal</span>
+                    <span>5G</span>
+                  </div>
+
+                  <div className="p-6">
+
+                    <div className="rounded-2xl bg-blue-600 p-5 text-white">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-100">
+                        {mobile.banner}
+                      </p>
+
+                      <h2 className="mt-2 text-2xl font-black">
+                        {mobile.page_title}
+                      </h2>
+
+                      <p className="mt-2 text-sm leading-6 text-blue-100">
+                        {mobile.message}
+                      </p>
+                    </div>
+
+                    <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                        Endereço actual
+                      </p>
+
+                      <p className="mt-2 break-all text-xs font-bold text-slate-700">
+                        {mobile.browser_url}
+                      </p>
+                    </div>
+
+                    <div className="mt-6 flex flex-col gap-3">
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() =>
+                          act(
+                            "inspect_url",
+                            "step_02",
+                            "inspect_url"
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Verificar o endereço
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() =>
+                          act(
+                            "open_link",
+                            "step_02",
+                            "link"
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"
+                      >
+                        Continuar
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() =>
+                          act(
+                            "leave_page",
+                            "step_02",
+                            "leave_page"
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-600"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Sair da página
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() =>
+                          act(
+                            "report",
+                            "step_02",
+                            "report"
+                          )
+                        }
+                        className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700"
+                      >
+                        Denunciar acesso suspeito
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === "login" && (
+              <div className="bg-slate-100 p-6 sm:p-8">
+                <div className="mx-auto max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+
+                  <div className="bg-slate-950 px-6 py-5 text-white">
+                    <div className="flex items-center gap-3">
+                      <ShieldCheck className="h-6 w-6 text-blue-400" />
+                      <div>
+                        <p className="font-black">
+                          {login.title}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Acesso institucional simulado
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={submitCredentials}
+                    className="p-6"
+                  >
+                    <p className="text-sm leading-6 text-slate-600">
+                      {login.helper}
+                    </p>
+
+                    <div className="mt-6">
+                      <label
+                        htmlFor="quishing-email"
+                        className="text-xs font-black uppercase tracking-[0.14em] text-slate-500"
+                      >
+                        Endereço de correio electrónico
+                      </label>
+
+                      <input
+                        id="quishing-email"
+                        name="email"
+                        type="email"
+                        value={email}
+                        onChange={(event) =>
+                          setEmail(event.target.value)
+                        }
+                        autoComplete="off"
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <div className="mt-5">
+                      <label
+                        htmlFor="quishing-password"
+                        className="text-xs font-black uppercase tracking-[0.14em] text-slate-500"
+                      >
+                        Palavra-passe
+                      </label>
+
+                      <input
+                        id="quishing-password"
+                        name="password"
+                        type="password"
+                        autoComplete="off"
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="mt-6 w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {login.submit_label}
+                    </button>
+                  </form>
+
+                  <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+                    <p className="text-xs leading-5 text-slate-500">
+                      O ambiente apresentado faz parte de uma experiência educativa controlada.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mx-auto mt-4 max-w-md">
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() =>
+                        act(
+                          "inspect_url",
+                          "step_03",
+                          "inspect_url"
+                        )
+                      }
+                      className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700"
+                    >
+                      Verificar endereço
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() =>
+                        act(
+                          "leave_page",
+                          "step_03",
+                          "leave_page"
+                        )
+                      }
+                      className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700"
+                    >
+                      Sair
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === "safe_exit" && (
+              <div className="p-8 sm:p-10">
+                <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-7">
+                  <ShieldCheck className="h-9 w-9 text-emerald-600" />
+
+                  <h2 className="mt-5 text-2xl font-black text-emerald-950">
+                    Percurso interrompido
+                  </h2>
+
+                  <p className="mt-3 max-w-2xl leading-7 text-emerald-900">
+                    A experiência permanece concluída apenas quando decidir terminar o percurso.
+                    Reveja as decisões disponíveis e encerre a simulação quando estiver preparado.
+                  </p>
+
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={finish}
+                    className="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700"
+                  >
+                    Concluir experiência
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step === "consequence" && (
+              <div className="p-8 sm:p-10">
+                <div className="rounded-3xl border border-amber-200 bg-amber-50 p-7">
+                  <ShieldAlert className="h-9 w-9 text-amber-600" />
+
+                  <h2 className="mt-5 text-2xl font-black text-amber-950">
+                    A experiência avançou para a consequência
+                  </h2>
+
+                  <p className="mt-4 max-w-3xl leading-7 text-amber-900">
+                    {simulation.consequence}
+                  </p>
+
+                  <p className="mt-4 max-w-3xl text-sm leading-6 text-amber-800">
+                    A experiência não revela a avaliação do seu comportamento neste momento.
+                    O resultado completo será apresentado apenas no relatório final.
+                  </p>
+
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={finish}
+                    className="mt-7 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 font-bold text-white hover:bg-slate-800"
+                  >
+                    Terminar experiência
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {message && (
+              <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+                <p className="text-sm leading-6 text-slate-600">
+                  {message}
+                </p>
+              </div>
+            )}
+          </section>
+
+          <aside className="space-y-6">
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/30">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">
+                Situação
+              </p>
+
+              <h2 className="mt-2 text-xl font-black text-slate-950">
+                Não assuma que o QR Code é o destino.
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Esta experiência foi desenhada para testar decisões em sequência:
+                mensagem, destino móvel, endereço e autenticação.
+              </p>
+            </div>
+
+            {step === "email" && (
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/30">
+                <div className="flex items-center gap-3">
+                  <ScanLine className="h-5 w-5 text-blue-600" />
+                  <p className="font-black text-slate-950">
+                    Elemento interactivo
+                  </p>
+                </div>
+
+                <div className="mt-5 rounded-2xl bg-slate-950 p-5">
+                  <QrVisual />
+
+                  <p className="mt-4 text-center text-xs leading-5 text-slate-400">
+                    Código representado apenas como elemento visual da experiência.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-6">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                Etapa actual
+              </p>
+
+              <div className="mt-4 space-y-3">
+                {[
+                  ["email", "Mensagem recebida"],
+                  ["mobile", "Acesso móvel"],
+                  ["login", "Autenticação"],
+                  ["consequence", "Consequência"],
+                ].map(([value, label], index) => {
+
+                  const active =
+                    step === value ||
+                    (
+                      value === "consequence" &&
+                      step === "safe_exit"
+                    );
+
+                  return (
+                    <div
+                      key={value}
+                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+                        active
+                          ? "border-blue-200 bg-blue-50"
+                          : "border-slate-200 bg-slate-50"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
+                          active
+                            ? "bg-blue-600 text-white"
+                            : "bg-slate-200 text-slate-500"
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
+
+                      <span
+                        className={`text-sm font-bold ${
+                          active
+                            ? "text-blue-900"
+                            : "text-slate-500"
+                        }`}
+                      >
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}

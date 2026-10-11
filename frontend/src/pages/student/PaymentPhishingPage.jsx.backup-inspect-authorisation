@@ -1,0 +1,1178 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  AlertCircle,
+  ArrowRight,
+  CreditCard,
+  ExternalLink,
+  FileText,
+  Landmark,
+  LockKeyhole,
+  Mail,
+  ShieldAlert,
+  ShieldCheck,
+  Smartphone,
+  XCircle,
+} from "lucide-react";
+import { simulationService } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+
+const SIMULATION_ID = "phishing-03";
+
+const STEP_LABELS = {
+  email: "Mensagem recebida",
+  portal: "Portal de pagamento",
+  details: "Detalhes da operação",
+  authorise: "Autorização",
+};
+
+function BrowserBar({ url }) {
+  return (
+    <div className="flex items-center gap-2 rounded-t-[22px] border-b border-slate-200 bg-slate-100 px-3 py-2.5">
+      <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+      <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+      <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+
+      <div className="ml-1 flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5">
+        <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        <span className="truncate text-[11px] font-semibold text-slate-500">
+          {url}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PaymentBrand() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+        <Landmark className="h-5 w-5" />
+      </div>
+
+      <div>
+        <p className="text-sm font-black tracking-tight text-slate-900">
+          Conta Segura
+        </p>
+        <p className="text-[11px] font-medium text-slate-500">
+          Central de pagamentos
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EndSimulationModal({ open, onCancel, onConfirm }) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="flex items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+            <AlertCircle className="h-5 w-5" />
+          </div>
+
+          <div>
+            <h2 className="text-lg font-black text-slate-900">
+              Encerrar simulação?
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              O percurso desta experiência será terminado e os dados
+              temporários desta simulação serão eliminados.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+          >
+            Continuar
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+          >
+            Encerrar simulação
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScenarioSystemState({ variant }) {
+  const states = {
+    reported: {
+      icon: ShieldCheck,
+      iconClass: "bg-blue-50 text-blue-600",
+      eyebrow: "Canal de segurança",
+      title: "Mensagem encaminhada para análise",
+      body:
+        "A comunicação foi encaminhada para análise. A sessão de pagamento foi interrompida sem concluir a operação.",
+      rows: [
+        ["Análise", "Em processamento"],
+        ["Operação", "Não concluída"],
+        ["Sessão", "Encerrada"],
+      ],
+    },
+
+    cancelled: {
+      icon: XCircle,
+      iconClass: "bg-emerald-50 text-emerald-600",
+      eyebrow: "Operação financeira",
+      title: "Operação cancelada",
+      body:
+        "O pedido foi cancelado antes da conclusão. Nenhuma autorização adicional foi enviada pelo ambiente simulado.",
+      rows: [
+        ["Operação", "Cancelada"],
+        ["Pedido", "Não concluído"],
+        ["Sessão", "Encerrada"],
+      ],
+    },
+
+    loading: {
+      icon: LockKeyhole,
+      iconClass: "bg-blue-50 text-blue-600",
+      eyebrow: "Autorização",
+      title: "A validar o pedido",
+      body:
+        "O serviço está a validar os dados recebidos e a comunicar com o sistema de pagamentos.",
+      rows: [
+        ["Serviço", "Em processamento"],
+        ["Pedido", "Recebido"],
+        ["Autorização", "Em análise"],
+      ],
+    },
+
+    unavailable: {
+      icon: AlertCircle,
+      iconClass: "bg-amber-50 text-amber-600",
+      eyebrow: "Serviço de pagamentos",
+      title: "Serviço temporariamente indisponível",
+      body:
+        "Não foi possível concluir a autorização neste momento. A operação não foi confirmada pelo serviço.",
+      rows: [
+        ["Serviço", "Temporariamente indisponível"],
+        ["Operação", "Não concluída"],
+        ["Sessão", "Encerrada"],
+      ],
+    },
+  };
+
+  const config = states[variant] || states.cancelled;
+  const Icon = config.icon;
+
+  return (
+    <div className="mx-auto w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl shadow-slate-200/50">
+      <BrowserBar url="https://conta-segura.example/pagamento" />
+
+      <div className="bg-gradient-to-b from-slate-50 to-white px-4 py-5 sm:px-8 sm:py-8">
+        <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <PaymentBrand />
+
+          <div className="mt-6 border-t border-slate-100 pt-6">
+            <div className="flex items-start gap-4">
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${config.iconClass}`}
+              >
+                <Icon className="h-5 w-5" />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  {config.eyebrow}
+                </p>
+
+                <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900">
+                  {config.title}
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  {config.body}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              {config.rows.map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between gap-4 border-b border-slate-200/80 py-2.5 last:border-b-0 last:pb-0 first:pt-0"
+                >
+                  <span className="text-xs font-semibold text-slate-500">
+                    {label}
+                  </span>
+
+                  <span className="text-right text-xs font-black text-slate-800">
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FinalNavigation({ onEnd, onNext }) {
+  return (
+    <div className="border-t border-slate-200 bg-white px-4 py-4 sm:px-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-black text-slate-900">
+            O seu percurso está a ser registado.
+          </p>
+
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            A análise detalhada será apresentada apenas depois das cinco
+            experiências.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={onEnd}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+          >
+            Encerrar simulação
+          </button>
+
+          <button
+            type="button"
+            onClick={onNext}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+          >
+            Próxima simulação
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function PaymentPhishingPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [simulation, setSimulation] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const [step, setStep] = useState("email");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const [showEndModal, setShowEndModal] = useState(false);
+
+  const [senderExpanded, setSenderExpanded] = useState(false);
+  const [messageExpanded, setMessageExpanded] = useState(false);
+  const [urlExpanded, setUrlExpanded] = useState(false);
+  const [transactionExpanded, setTransactionExpanded] = useState(false);
+
+  const [authorisationCode, setAuthorisationCode] = useState("");
+
+  const [scenarioState, setScenarioState] = useState(null);
+  const [scenarioFinished, setScenarioFinished] = useState(false);
+  const [finishSent, setFinishSent] = useState(false);
+
+  useEffect(() => {
+    simulationService
+      .get(SIMULATION_ID)
+      .then(setSimulation)
+      .catch((err) => {
+        setError(
+          err?.message || "Não foi possível carregar a simulação."
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
+
+  const currentLabel = useMemo(
+    () => STEP_LABELS[step] || "Experiência em curso",
+    [step]
+  );
+
+  async function recordAction(
+    action,
+    stepId,
+    interactionType,
+    details = {}
+  ) {
+    if (busy) return null;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      return await simulationService.evaluate(
+        SIMULATION_ID,
+        action,
+        user?.id,
+        stepId,
+        interactionType,
+        details
+      );
+    } catch (err) {
+      setError(
+        err?.message || "Não foi possível registar esta acção."
+      );
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function finishScenarioState(variant) {
+    setScenarioState(variant);
+    setScenarioFinished(true);
+  }
+
+  async function inspectSender() {
+    const result = await recordAction(
+      "inspect_sender",
+      "step_01",
+      "inspect_sender",
+      {
+        surface: "email",
+        target: "sender",
+      }
+    );
+
+    if (result) setSenderExpanded(true);
+  }
+
+  async function inspectMessage() {
+    const result = await recordAction(
+      "inspect_message",
+      "step_01",
+      "inspect",
+      {
+        surface: "email",
+        target: "message",
+      }
+    );
+
+    if (result) setMessageExpanded(true);
+  }
+
+  async function openPortal() {
+    const result = await recordAction(
+      "open_link",
+      "step_01",
+      "open_link",
+      {
+        destination: "payment_portal",
+        target_url: simulation?.link_target || "",
+      }
+    );
+
+    if (result) {
+      setStep("portal");
+    }
+  }
+
+  async function reportEmail() {
+    const result = await recordAction(
+      "report_email",
+      "step_01",
+      "report",
+      {
+        surface: "email",
+        reason: "suspected_phishing",
+      }
+    );
+
+    if (result) finishScenarioState("reported");
+  }
+
+  async function inspectPortalUrl() {
+    const result = await recordAction(
+      "inspect_url",
+      "step_02",
+      "inspect_url",
+      {
+        surface: "payment_portal",
+        url: "https://conta-segura.example/pagamento",
+      }
+    );
+
+    if (result) setUrlExpanded(true);
+  }
+
+  async function viewTransaction() {
+    const result = await recordAction(
+      "view_transaction",
+      "step_02",
+      "details",
+      {
+        target: "transaction_summary",
+      }
+    );
+
+    if (result) {
+      setTransactionExpanded(true);
+      setStep("details");
+    }
+  }
+
+  async function leavePortal() {
+    const result = await recordAction(
+      "leave_page",
+      "step_02",
+      "leave_page",
+      {
+        surface: "payment_portal",
+      }
+    );
+
+    if (result) finishScenarioState("cancelled");
+  }
+
+  async function reportPortal() {
+    const result = await recordAction(
+      "report_site",
+      "step_02",
+      "report",
+      {
+        surface: "payment_portal",
+        reason: "suspected_fraud",
+      }
+    );
+
+    if (result) finishScenarioState("reported");
+  }
+
+  async function inspectPaymentDetails() {
+    const result = await recordAction(
+      "inspect_payment_details",
+      "step_03",
+      "details",
+      {
+        target: "beneficiary_and_amount",
+      }
+    );
+
+    if (result) setTransactionExpanded(true);
+  }
+
+  async function continuePayment() {
+    const result = await recordAction(
+      "continue_payment",
+      "step_03",
+      "continue",
+      {
+        target: "payment_authorisation",
+        user_decision: "continue",
+      }
+    );
+
+    if (result) {
+      setStep("authorise");
+    }
+  }
+
+  async function cancelPayment() {
+    const result = await recordAction(
+      "cancel",
+      "step_03",
+      "cancel",
+      {
+        target: "payment_operation",
+        user_decision: "cancel",
+      }
+    );
+
+    if (result) finishScenarioState("cancelled");
+  }
+
+  async function inspectAuthorisation() {
+    const result = await recordAction(
+      "inspect_authorisation",
+      "step_04",
+      "inspect",
+      {
+        target: "authorisation_form",
+      }
+    );
+
+    if (result) {
+      setScenarioState(null);
+      setError("");
+    }
+  }
+
+  async function submitAuthorisation(event) {
+    event.preventDefault();
+
+    if (busy || !authorisationCode.trim()) return;
+
+    const result = await recordAction(
+      "submit_authorisation_code",
+      "step_04",
+      "credentials",
+      {
+        code_entered: true,
+        target: "authorisation_form",
+      }
+    );
+
+    if (!result) return;
+
+    setScenarioState("loading");
+
+    window.setTimeout(() => {
+      setScenarioState("unavailable");
+
+      window.setTimeout(() => {
+        setScenarioFinished(true);
+      }, 1300);
+    }, 1800);
+  }
+
+  async function cancelAuthorisation() {
+    const result = await recordAction(
+      "cancel",
+      "step_04",
+      "cancel",
+      {
+        target: "authorisation_form",
+        code_entered: Boolean(authorisationCode),
+      }
+    );
+
+    if (result) finishScenarioState("cancelled");
+  }
+
+  useEffect(() => {
+    if (!scenarioFinished || finishSent) return;
+
+    setFinishSent(true);
+
+    simulationService
+      .evaluate(
+        SIMULATION_ID,
+        "finish",
+        user?.id,
+        "step_05",
+        "finish",
+        {
+          scenario_finished: true,
+        }
+      )
+      .catch(() => {
+        setFinishSent(false);
+      });
+  }, [scenarioFinished, finishSent, user?.id]);
+
+  function nextSimulation() {
+    navigate("/student/simulacoes/phishing-04");
+  }
+
+  function confirmEndSimulation() {
+    if (user?.id) {
+      simulationService.clearPhishingResult(user.id).catch(() => {});
+    }
+
+    navigate("/student/simulacoes");
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 sm:p-8">
+        <div className="mx-auto max-w-6xl rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-xl shadow-slate-200/40">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            A preparar a experiência...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!simulation) {
+    return (
+      <div className="p-4 sm:p-8">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-red-200 bg-red-50 p-6 text-sm font-medium text-red-700">
+          {error || "Simulação não encontrada."}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <EndSimulationModal
+        open={showEndModal}
+        onCancel={() => setShowEndModal(false)}
+        onConfirm={confirmEndSimulation}
+      />
+
+      <div className="min-h-full bg-slate-50">
+        <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-8">
+          <div className="mb-5 flex flex-col gap-4 lg:mb-7 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-blue-700">
+                <ShieldAlert className="h-3.5 w-3.5" />
+                Phishing · 03/05
+              </div>
+
+              <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+                {simulation.title}
+              </h1>
+
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                Existe uma operação de pagamento pendente. Utilize o ambiente
+                como faria normalmente e tome as suas próprias decisões.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Etapa actual
+              </p>
+
+              <p className="mt-1 text-sm font-black text-slate-900">
+                {currentLabel}
+              </p>
+            </div>
+          </div>
+
+          {error && (
+            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl shadow-slate-200/60">
+            <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100">
+                  {step === "email" ? (
+                    <Mail className="h-4 w-4 text-slate-600" />
+                  ) : step === "portal" ? (
+                    <Smartphone className="h-4 w-4 text-slate-600" />
+                  ) : (
+                    <CreditCard className="h-4 w-4 text-slate-600" />
+                  )}
+                </span>
+
+                Ambiente simulado
+                <span className="text-slate-300">•</span>
+                Sem avaliação durante a experiência
+              </div>
+            </div>
+
+            {step === "email" && (
+              <div className="p-4 sm:p-7">
+                <div className="mx-auto max-w-4xl rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-6">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                        <Mail className="h-4 w-4" />
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-black text-slate-900">
+                          Caixa de correio
+                        </p>
+
+                        <p className="text-[11px] text-slate-500">
+                          Nova mensagem recebida
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">
+                      Prioridade
+                    </span>
+                  </div>
+
+                  <div className="p-4 sm:p-6">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+                        <Landmark className="h-5 w-5" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-900">
+                          {simulation.sender}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {simulation.subject}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                      <p className="text-sm leading-7 text-slate-700">
+                        {simulation.message}
+                      </p>
+                    </div>
+
+                    <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={inspectSender}
+                        className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        Ver detalhes do remetente
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={inspectMessage}
+                        className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        Inspeccionar mensagem
+                      </button>
+                    </div>
+
+                    {(senderExpanded || messageExpanded) && (
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.17em] text-slate-400">
+                          Informação analisada
+                        </p>
+
+                        {senderExpanded && (
+                          <div className="mt-3 grid gap-2 text-xs">
+                            <div className="flex justify-between gap-4">
+                              <span className="text-slate-500">Remetente</span>
+                              <span className="text-right font-bold text-slate-800">
+                                {simulation.sender}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between gap-4">
+                              <span className="text-slate-500">Assunto</span>
+                              <span className="text-right font-bold text-slate-800">
+                                {simulation.subject}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {messageExpanded && (
+                          <div className="mt-3 border-t border-slate-100 pt-3">
+                            <p className="text-xs leading-5 text-slate-600">
+                              A mensagem contém uma solicitação de pagamento,
+                              pressão temporal e uma ligação para validação.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={openPortal}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {simulation.link_text}
+                        <ExternalLink className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={reportEmail}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        Denunciar mensagem
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === "portal" && (
+              <div className="bg-slate-50 px-3 py-5 sm:px-6 sm:py-8">
+                <div className="mx-auto w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl shadow-slate-200/50">
+                  <BrowserBar url="https://conta-segura.example/pagamento" />
+
+                  <div className="bg-gradient-to-b from-blue-50/70 to-white px-5 py-6 sm:px-8 sm:py-8">
+                    <div className="flex items-center justify-between gap-3">
+                      <PaymentBrand />
+
+                      <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[10px] font-black text-blue-700">
+                        Sessão protegida
+                      </span>
+                    </div>
+
+                    <div className="mt-7 rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                          <FileText className="h-5 w-5" />
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                            Operação pendente
+                          </p>
+
+                          <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900">
+                            Pagamento aguardando confirmação
+                          </h2>
+
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            Foi identificada uma tentativa de pagamento que
+                            requer validação para evitar encargos adicionais.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+                        <div className="flex items-end justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] font-bold text-slate-500">
+                              Valor pendente
+                            </p>
+
+                            <p className="mt-1 text-2xl font-black text-slate-900">
+                              8 450,00 MZN
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl bg-white px-3 py-2 text-right shadow-sm">
+                            <p className="text-[10px] font-bold text-slate-400">
+                              Referência
+                            </p>
+
+                            <p className="mt-1 text-xs font-black text-slate-800">
+                              PG-80421
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={inspectPortalUrl}
+                          className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Analisar endereço
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={viewTransaction}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Ver dados da operação
+                          <FileText className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {urlExpanded && (
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                            Endereço da sessão
+                          </p>
+
+                          <p className="mt-2 break-all text-xs font-bold text-blue-700">
+                            https://conta-segura.example/pagamento
+                          </p>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={viewTransaction}
+                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
+                      >
+                        Consultar antes de pagar
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={leavePortal}
+                          className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Sair
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={reportPortal}
+                          className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Denunciar site
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === "details" && !scenarioState && (
+              <div className="bg-slate-50 px-3 py-5 sm:px-6 sm:py-8">
+                <div className="mx-auto w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl shadow-slate-200/50">
+                  <BrowserBar url="https://conta-segura.example/pagamento/detalhes" />
+
+                  <div className="px-5 py-6 sm:px-8 sm:py-8">
+                    <PaymentBrand />
+
+                    <div className="mt-7">
+                      <p className="text-[10px] font-black uppercase tracking-[0.17em] text-slate-400">
+                        Resumo da operação
+                      </p>
+
+                      <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+                        Confirme os dados antes de continuar
+                      </h2>
+
+                      <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200">
+                        {[
+                          ["Beneficiário", "Serviços Online MZ"],
+                          ["Referência", "PG-80421"],
+                          ["Descrição", "Regularização de pagamento"],
+                          ["Valor", "8 450,00 MZN"],
+                          ["Prazo", "Hoje, 18:00"],
+                        ].map(([label, value]) => (
+                          <div
+                            key={label}
+                            className="flex items-start justify-between gap-6 border-b border-slate-100 px-4 py-4 last:border-b-0"
+                          >
+                            <span className="text-xs font-semibold text-slate-500">
+                              {label}
+                            </span>
+
+                            <span className="text-right text-xs font-black text-slate-900">
+                              {value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {transactionExpanded && (
+                        <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm">
+                              <FileText className="h-4 w-4" />
+                            </div>
+
+                            <div>
+                              <p className="text-xs font-black text-slate-900">
+                                Dados consultados
+                              </p>
+
+                              <p className="mt-1 text-xs leading-5 text-slate-600">
+                                O serviço solicita uma confirmação de
+                                identidade antes de autorizar a operação.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-6 grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={inspectPaymentDetails}
+                          className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Consultar novamente
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={continuePayment}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:opacity-60"
+                        >
+                          Continuar pagamento
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={cancelPayment}
+                        className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        Cancelar operação
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === "authorise" && !scenarioState && (
+              <div className="bg-slate-50 px-3 py-5 sm:px-6 sm:py-8">
+                <div className="mx-auto w-full max-w-xl overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-2xl shadow-slate-200/50">
+                  <BrowserBar url="https://conta-segura.example/pagamento/autorizacao" />
+
+                  <div className="bg-gradient-to-b from-slate-50 to-white px-5 py-6 sm:px-8 sm:py-8">
+                    <PaymentBrand />
+
+                    <div className="mt-7 rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                          <Smartphone className="h-5 w-5" />
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                            Confirmação de identidade
+                          </p>
+
+                          <h2 className="mt-2 text-xl font-black tracking-tight text-slate-900">
+                            Introduza o código de autorização
+                          </h2>
+
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            Um código foi enviado para o contacto associado à
+                            conta. Introduza-o para confirmar a operação.
+                          </p>
+                        </div>
+                      </div>
+
+                      <form onSubmit={submitAuthorisation} className="mt-6">
+                        <label
+                          htmlFor="authorisation-code"
+                          className="text-xs font-black text-slate-800"
+                        >
+                          Código de autorização
+                        </label>
+
+                        <input
+                          id="authorisation-code"
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          value={authorisationCode}
+                          onChange={(event) =>
+                            setAuthorisationCode(event.target.value)
+                          }
+                          placeholder="Introduza o código recebido"
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                        />
+
+                        <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                          <div className="flex items-center justify-between gap-4 text-xs">
+                            <span className="font-semibold text-slate-500">
+                              Operação
+                            </span>
+
+                            <span className="font-black text-slate-900">
+                              PG-80421
+                            </span>
+                          </div>
+
+                          <div className="mt-2 flex items-center justify-between gap-4 text-xs">
+                            <span className="font-semibold text-slate-500">
+                              Valor
+                            </span>
+
+                            <span className="font-black text-slate-900">
+                              8 450,00 MZN
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={busy || !authorisationCode.trim()}
+                          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Confirmar autorização
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={inspectAuthorisation}
+                          className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Inspeccionar autorização
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={cancelAuthorisation}
+                          className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Cancelar
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {scenarioState && (
+              <div className="bg-slate-50 px-3 py-6 sm:px-6 sm:py-8">
+                <ScenarioSystemState variant={scenarioState} />
+              </div>
+            )}
+
+            {!scenarioFinished && (
+              <div className="border-t border-slate-200 bg-white px-4 py-4 sm:px-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">
+                      O seu percurso está a ser registado.
+                    </p>
+
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Cada interacção desta experiência é registada para a
+                      análise final.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowEndModal(true)}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Encerrar simulação
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {scenarioFinished && (
+              <FinalNavigation
+                onEnd={() => setShowEndModal(true)}
+                onNext={nextSimulation}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

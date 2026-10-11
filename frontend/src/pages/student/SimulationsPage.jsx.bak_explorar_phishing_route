@@ -1,0 +1,401 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  CreditCard,
+  Download,
+  KeyRound,
+  LockKeyhole,
+  Mail,
+  ShieldAlert,
+  Target,
+  Users,
+} from "lucide-react";
+import { simulationService } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+
+const categoryImages = {
+  phishing:
+    "https://images.unsplash.com/photo-1563013544-824ae1b704d3?auto=format&fit=crop&w=1200&q=85",
+
+  engenharia:
+    "https://images.pexels.com/photos/3769021/pexels-photo-3769021.jpeg?auto=compress&cs=tinysrgb&w=1000",
+
+  pirataria:
+    "https://images.pexels.com/photos/1181244/pexels-photo-1181244.jpeg?auto=compress&cs=tinysrgb&w=1000",
+
+  contas:
+    "https://images.pexels.com/photos/5380642/pexels-photo-5380642.jpeg?auto=compress&cs=tinysrgb&w=1000",
+
+  fraudes:
+    "https://images.pexels.com/photos/669610/pexels-photo-669610.jpeg?auto=compress&cs=tinysrgb&w=1000",
+};
+
+const futureCategories = [
+  {
+    id: "engenharia-social",
+    number: "02",
+    title: "Engenharia Social",
+    description:
+      "Reconheça manipulação, pressão e pedidos de informação em situações realistas.",
+    icon: Users,
+    image: categoryImages.engenharia,
+  },
+  {
+    id: "software-pirateado",
+    number: "03",
+    title: "Software Pirateado",
+    description:
+      "Avalie downloads, instaladores, avisos de segurança e decisões de execução.",
+    icon: Download,
+    image: categoryImages.pirataria,
+  },
+  {
+    id: "contas-credenciais",
+    number: "04",
+    title: "Contas e Credenciais",
+    description:
+      "Pratique decisões perante alertas de acesso, sessões, palavras-passe e MFA.",
+    icon: KeyRound,
+    image: categoryImages.contas,
+  },
+  {
+    id: "fraudes-digitais",
+    number: "05",
+    title: "Fraudes Digitais",
+    description:
+      "Enfrente ofertas, pagamentos e situações concebidas para provocar decisões precipitadas.",
+    icon: CreditCard,
+    image: categoryImages.fraudes,
+  },
+];
+
+const TOTAL_PHISHING_SIMULATIONS = 5;
+export default function SimulationsPage() {
+  const { user } = useAuth();
+  const [simulations, setSimulations] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSimulations() {
+      try {
+        const data = await simulationService.getAll();
+
+        if (active) {
+          setSimulations(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        if (active) {
+          setSimulations([]);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadSimulations();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const phishingSimulations = useMemo(
+    () =>
+      simulations.filter(
+        (simulation) =>
+          String(simulation.category || "").toLowerCase() === "phishing"
+      ),
+    [simulations]
+  );
+
+  const completedPhishing = useMemo(() => {
+    const results = user?.simulation_results;
+
+    if (!results || typeof results !== "object") {
+      return 0;
+    }
+
+    return phishingSimulations.filter(
+      (simulation) =>
+        results?.[simulation.id]?.completed === true
+    ).length;
+  }, [user?.simulation_results, phishingSimulations]);
+
+  const phishingProgress = Math.min(
+    100,
+    Math.round(
+      (completedPhishing / TOTAL_PHISHING_SIMULATIONS) * 100
+    )
+  );
+
+  return (
+    <div className="min-h-full bg-slate-50">
+      <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+
+        {/* CABEÇALHO */}
+        <header className="mb-5 sm:mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600">
+                Centro de treino prático
+              </p>
+
+              <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                Simulações
+              </h1>
+
+              <p className="mt-2 max-w-2xl text-sm leading-5 text-slate-500">
+                Pratique decisões de segurança digital através de situações
+                interactivas inspiradas em ambientes reais.
+              </p>
+            </div>
+
+            <div className="inline-flex w-fit items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-sm">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <Target className="h-4 w-4" />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  Percurso
+                </p>
+
+                <p className="text-xs font-bold text-slate-900">
+                  5 áreas de treino
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* PHISHING */}
+        <section className="mb-6 overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-md shadow-slate-200/40">
+
+          <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+
+            {/* IMAGEM */}
+            <div className="relative min-h-[210px] self-stretch overflow-hidden sm:min-h-[240px] lg:min-h-[285px]">
+              <img
+                src={categoryImages.phishing}
+                alt="Simulações reais de phishing"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-transparent" />
+
+              <div className="absolute left-4 top-4 flex items-center gap-2 sm:left-5 sm:top-5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-xs font-black text-white">
+                  01
+                </span>
+
+                <span className="rounded-full bg-slate-950/75 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-white backdrop-blur-sm">
+                  Treino disponível
+                </span>
+              </div>
+
+              <div className="absolute bottom-5 left-5 right-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-200">
+                  Laboratório activo
+                </p>
+
+                <h2 className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">
+                  Simulações Reais de Phishing
+                </h2>
+              </div>
+            </div>
+
+            {/* INFORMAÇÃO */}
+            <div className="flex flex-col justify-between p-5 sm:p-6">
+
+              <div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <Mail className="h-5 w-5" />
+                </div>
+
+                <h2 className="mt-3 text-xl font-black tracking-tight text-slate-950">
+                  Treine como se fosse real.
+                </h2>
+
+                <p className="mt-2 max-w-2xl text-sm leading-5 text-slate-500">
+                  Entre numa caixa de correio simulada, analise remetentes,
+                  abra links, investigue páginas e tome decisões perante
+                  diferentes níveis de ameaça.
+                </p>
+              </div>
+
+              <div className="mt-5">
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-lg font-black text-slate-950">
+                      {loading ? "—" : TOTAL_PHISHING_SIMULATIONS}
+                    </p>
+
+                    <p className="text-[10px] font-semibold text-slate-500">
+                      cenários interactivos
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+                    <p className="text-lg font-black text-blue-600">
+                      {completedPhishing}
+                    </p>
+
+                    <p className="text-[10px] font-semibold text-slate-500">
+                      concluídos
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-[10px] font-bold">
+                    <span className="text-slate-500">
+                      Progresso de Phishing
+                    </span>
+
+                    <span className="text-blue-600">
+                      {phishingProgress}%
+                    </span>
+                  </div>
+
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                      style={{
+                        width: `${phishingProgress}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+                    <ShieldAlert className="h-4 w-4 text-blue-500" />
+                    <span>Treino interactivo baseado em situações reais</span>
+                  </div>
+
+                  <Link
+                    to="/student/simulacoes/phishing-01"
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-blue-600/15 transition hover:bg-blue-700"
+                  >
+                    Explorar Phishing
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ÁREAS DE TREINO */}
+        <section>
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-blue-600">
+                Áreas de treino
+              </p>
+
+              <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">
+                Escolha o ambiente onde quer praticar.
+              </h2>
+            </div>
+
+            <span className="hidden text-[11px] font-semibold text-slate-400 md:block">
+              Disponibilizadas progressivamente
+            </span>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {futureCategories.map((category) => {
+              const Icon = category.icon;
+
+              return (
+                <article
+                  key={category.id}
+                  className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="relative h-32 shrink-0 overflow-hidden sm:h-36">
+                    <img
+                      src={category.image}
+                      alt={category.title}
+                      className="h-full w-full object-cover transition duration-500 hover:scale-105"
+                    />
+
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/10 to-transparent" />
+
+                    <div className="absolute left-3 top-3 flex items-center gap-1.5">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-[10px] font-black text-white">
+                        {category.number}
+                      </span>
+
+                      <span className="rounded-full bg-slate-950/70 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-white">
+                        Em breve
+                      </span>
+                    </div>
+
+                    <h3 className="absolute bottom-3 left-3 right-3 text-base font-black tracking-tight text-white">
+                      {category.title}
+                    </h3>
+                  </div>
+
+                  <div className="flex flex-1 flex-col p-4">
+                    <div className="flex min-h-[78px] items-start gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+                        <Icon className="h-4 w-4" />
+                      </div>
+
+                      <p className="text-xs leading-5 text-slate-500">
+                        {category.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        Em preparação
+                      </span>
+
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                        <LockKeyhole className="h-3 w-3" />
+                        Brevemente
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* NOTA */}
+        <section className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3.5 sm:px-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm">
+              <ShieldAlert className="h-4 w-4" />
+            </div>
+
+            <div className="min-w-0">
+              <h3 className="text-xs font-black text-slate-900">
+                Aprender com decisões, não apenas com perguntas.
+              </h3>
+
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+                As simulações reproduzem ambientes, interacções e consequências
+                de situações de segurança digital.
+              </p>
+            </div>
+
+            <CheckCircle2 className="ml-auto h-4 w-4 shrink-0 text-blue-600" />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

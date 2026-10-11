@@ -1,0 +1,710 @@
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  Award,
+  CheckCircle2,
+  Download,
+  Eye,
+  ExternalLink,
+  LoaderCircle,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+
+const API =
+  "http://127.0.0.1:8000/api";
+
+function formatarData(valor) {
+  if (!valor) {
+    return "Sem data";
+  }
+
+  const data =
+    new Date(valor);
+
+  if (Number.isNaN(data.getTime())) {
+    return String(valor);
+  }
+
+  return data.toLocaleDateString(
+    "pt-PT",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  );
+}
+
+function obterCodigo(
+  certificate
+) {
+  return (
+    certificate?.certificate_code ||
+    certificate?.id ||
+    "Sem código"
+  );
+}
+
+function ModalCertificado({
+  certificate,
+  onClose,
+  onDownload,
+  onOpenPdf,
+}) {
+  if (!certificate) {
+    return null;
+  }
+
+  const percentage =
+    certificate.percentage ??
+    certificate.score ??
+    0;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-3xl overflow-hidden rounded-[30px] bg-white shadow-2xl">
+        <div className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 px-7 py-8 text-white">
+          <div className="absolute -right-16 -top-20 h-52 w-52 rounded-full bg-white/10 blur-3xl" />
+
+          <div className="relative flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
+                <Award
+                  size={28}
+                />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-100">
+                  Certificação SICSI III
+                </p>
+
+                <h2 className="mt-1 text-2xl font-black">
+                  Certificado
+                </h2>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                onClose
+              }
+              className="rounded-xl p-2 text-white/80 hover:bg-white/10 hover:text-white"
+            >
+              <X size={19} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 sm:p-7">
+          <div className="rounded-[24px] border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-6 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+              <Award
+                size={29}
+              />
+            </div>
+
+            <p className="mt-5 text-xs font-black uppercase tracking-[0.14em] text-blue-600">
+              Certificamos
+            </p>
+
+            <h3 className="mt-2 text-2xl font-black text-slate-950">
+              {certificate.student_name ||
+                "Estudante"}
+            </h3>
+
+            <p className="mt-4 text-sm text-slate-500">
+              Concluiu com aproveitamento o curso
+            </p>
+
+            <p className="mt-2 text-xl font-black text-slate-900">
+              {certificate.course_title ||
+                "Curso SICSI III"}
+            </p>
+
+            <div className="mx-auto mt-6 inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-blue-700 shadow-sm ring-1 ring-blue-100">
+              <CheckCircle2
+                size={17}
+              />
+
+              Aproveitamento:
+              {" "}
+              {percentage}%
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                C?digo
+              </p>
+
+              <p className="mt-2 break-all font-mono text-xs font-bold text-slate-800">
+                {obterCodigo(
+                  certificate
+                )}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Emitido em
+              </p>
+
+              <p className="mt-2 text-sm font-black text-slate-800">
+                {formatarData(
+                  certificate.issued_at
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() =>
+                onOpenPdf(
+                  certificate
+                )
+              }
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/15 hover:bg-blue-700"
+            >
+              <ExternalLink
+                size={16}
+              />
+              Abrir PDF
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                onDownload(
+                  certificate
+                )
+              }
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"
+            >
+              <Download
+                size={16}
+              />
+              Baixar PDF
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminCertificatesPage() {
+  const [certificates, setCertificates] =
+    useState([]);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const [selected, setSelected] =
+    useState(null);
+
+  async function loadCertificates() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response =
+        await fetch(
+          `${API}/certificates`
+        );
+
+      const data =
+        await response
+          .json()
+          .catch(
+            () => null
+          );
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.detail ===
+            "string"
+            ? data.detail
+            : "Não foi possível carregar os certificados."
+        );
+      }
+
+      setCertificates(
+        Array.isArray(data)
+          ? data
+          : []
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Não foi possível carregar os certificados."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadCertificates();
+  }, []);
+
+  const filtered =
+    useMemo(() => {
+      const termo =
+        search
+          .trim()
+          .toLowerCase();
+
+      if (!termo) {
+        return certificates;
+      }
+
+      return certificates.filter(
+        (certificate) =>
+          String(
+            certificate.student_name ||
+              ""
+          )
+            .toLowerCase()
+            .includes(
+              termo
+            ) ||
+          String(
+            certificate.course_title ||
+              ""
+          )
+            .toLowerCase()
+            .includes(
+              termo
+            ) ||
+          String(
+            certificate.certificate_code ||
+              certificate.id ||
+              ""
+          )
+            .toLowerCase()
+            .includes(
+              termo
+            )
+      );
+    }, [
+      certificates,
+      search,
+    ]);
+
+  const total =
+    certificates.length;
+
+  const aproveitamentoMedio =
+    total > 0
+      ? Math.round(
+          certificates.reduce(
+            (
+              soma,
+              certificate
+            ) =>
+              soma +
+              Number(
+                certificate.percentage ??
+                  certificate.score ??
+                  0
+              ),
+            0
+          ) / total
+        )
+      : 0;
+
+  function abrirPdf(
+    certificate
+  ) {
+    const janela =
+      window.open(
+        `${API}/certificates/${certificate.id}/pdf`,
+        "_blank"
+      );
+
+    if (!janela) {
+      setError(
+        "Permita pop-ups no navegador para abrir o PDF."
+      );
+    }
+  }
+
+  async function baixarPdf(
+    certificate
+  ) {
+    try {
+      const response =
+        await fetch(
+          `${API}/certificates/${certificate.id}/pdf`
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          "N?o foi poss?vel gerar o PDF."
+        );
+      }
+
+      const blob =
+        await response.blob();
+
+      const url =
+        window.URL.createObjectURL(
+          blob
+        );
+
+      const link =
+        document.createElement(
+          "a"
+        );
+
+      link.href = url;
+      link.download =
+        `${obterCodigo(certificate)}.pdf`;
+
+      document.body.appendChild(
+        link
+      );
+
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(
+        url
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Não foi possível descarregar o certificado."
+      );
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* HERO */}
+
+      <section className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-6 text-white shadow-2xl shadow-blue-600/20 lg:p-8">
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-cyan-300/10 blur-3xl" />
+
+        <div className="relative grid gap-6 lg:grid-cols-[1.5fr_1fr_auto] lg:items-center">
+          <div>
+            <div className="flex items-center gap-2 text-blue-100">
+              <Award
+                size={18}
+              />
+
+              <span className="text-[11px] font-black uppercase tracking-[0.18em]">
+                Administração
+              </span>
+            </div>
+
+            <h1 className="mt-2 text-3xl font-black tracking-tight lg:text-4xl">
+              Certificados
+            </h1>
+
+            <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100 lg:text-base">
+              Consulte as certificações emitidas pelo SICSI III e disponibilize os respectivos documentos.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <Award
+                size={18}
+              />
+
+              <p className="mt-2 text-2xl font-black">
+                {total}
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                Emitidos
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <CheckCircle2
+                size={18}
+              />
+
+              <p className="mt-2 text-2xl font-black">
+                {aproveitamentoMedio}%
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                MÉDIA
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              loadCertificates
+            }
+            disabled={
+              loading
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3.5 text-sm font-black text-blue-700 shadow-xl transition hover:-translate-y-0.5 disabled:opacity-50"
+          >
+            <RefreshCw
+              size={17}
+              className={
+                loading
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+            Actualizar
+          </button>
+        </div>
+      </section>
+
+      {/* PESQUISA */}
+
+      <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="relative">
+          <Search
+            size={18}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+
+          <input
+            value={
+              search
+            }
+            onChange={(
+              event
+            ) =>
+              setSearch(
+                event.target
+                  .value
+              )
+            }
+            placeholder="Pesquisar por estudante, curso ou código..."
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 pl-11 text-sm font-semibold !text-slate-900 placeholder:text-slate-400 outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+            style={{
+              color:
+                "#0f172a",
+              WebkitTextFillColor:
+                "#0f172a",
+            }}
+          />
+        </div>
+      </section>
+
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </div>
+      ) : null}
+      {/* CERTIFICADOS SICSI III */}
+      {loading ? (
+        <section className="flex min-h-[360px] items-center justify-center rounded-[28px] border border-slate-200 bg-white">
+          <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
+            <LoaderCircle
+              size={22}
+              className="animate-spin text-blue-600"
+            />
+            A carregar certificados...
+          </div>
+        </section>
+      ) : filtered.length ===
+        0 ? (
+        <section className="flex min-h-[360px] flex-col items-center justify-center rounded-[28px] border border-dashed border-slate-300 bg-white p-8 text-center">
+          <Award
+            size={46}
+            className="text-slate-300"
+          />
+
+          <h2 className="mt-4 text-lg font-black text-slate-900">
+            Nenhum certificado encontrado
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Os certificados aparecerão aqui quando forem emitidos.
+          </p>
+        </section>
+      ) : (
+        <section className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map(
+            (certificate) => {
+              const percentage =
+                certificate.percentage ??
+                certificate.score ??
+                0;
+
+              return (
+                <article
+                  key={
+                    certificate.id
+                  }
+                  className="group flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+                >
+                  <div className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-6 text-white">
+                    <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+
+                    <div className="relative flex items-start justify-between gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
+                        <Award
+                          size={24}
+                        />
+                      </div>
+
+                      <div className="rounded-full bg-emerald-300/20 px-3 py-1.5 text-[10px] font-black text-emerald-50">
+                        APROVADO
+                      </div>
+                    </div>
+
+                    <p className="relative mt-5 text-[10px] font-black uppercase tracking-[0.15em] text-blue-100">
+                      Certificação SICSI III
+                    </p>
+
+                    <h2 className="relative mt-1 line-clamp-2 text-lg font-black leading-6">
+                      {certificate.course_title ||
+                        "Curso SICSI III"}
+                    </h2>
+                  </div>
+
+                  <div className="flex flex-1 flex-col p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-sm font-black text-slate-700">
+                        {String(
+                          certificate.student_name ||
+                            "E"
+                        )
+                          .charAt(
+                            0
+                          )
+                          .toUpperCase()}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-950">
+                          {certificate.student_name ||
+                            "Estudante"}
+                        </p>
+
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Emitido em{" "}
+                          {formatarData(
+                            certificate.issued_at
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl bg-blue-50 p-4">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-blue-500">
+                          Aproveitamento
+                        </p>
+
+                        <p className="mt-1 text-xl font-black text-blue-950">
+                          {percentage}%
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                          C?digo
+                        </p>
+
+                        <p className="mt-2 truncate font-mono text-[10px] font-bold text-slate-700">
+                          {obterCodigo(
+                            certificate
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelected(
+                            certificate
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-50"
+                      >
+                        <Eye
+                          size={15}
+                        />
+                        Ver
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          abrirPdf(
+                            certificate
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-black text-white shadow-md shadow-blue-600/15 hover:bg-blue-700"
+                      >
+                        <ExternalLink
+                          size={15}
+                        />
+                        PDF
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        baixarPdf(
+                          certificate
+                        )
+                      }
+                      className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-xs font-black text-blue-700 hover:bg-blue-100"
+                    >
+                      <Download
+                        size={15}
+                      />
+                      Baixar certificado
+                    </button>
+                  </div>
+                </article>
+              );
+            }
+          )}
+        </section>
+      )}
+
+      {selected ? (
+        <ModalCertificado
+          certificate={
+            selected
+          }
+          onClose={() =>
+            setSelected(
+              null
+            )
+          }
+          onDownload={
+            baixarPdf
+          }
+          onOpenPdf={
+            abrirPdf
+          }
+        />
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,1237 @@
+[
+  {
+    "id": "course_fundamentos_sicsi",
+    "title": "Fundamentos de Segurança Digital",
+    "description": "Aprenda os princípios essenciais para proteger contas, dados, dispositivos e identidade digital contra ameaças comuns.",
+    "level": "Básico",
+    "published": true,
+    "lessons": [
+      {
+        "id": "lesson_fundamentos_01",
+        "title": "O que é Segurança Digital?",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 1
+      },
+      {
+        "id": "lesson_fundamentos_02",
+        "title": "Principais ameaças digitais",
+        "video_url": "https://www.youtube.com/embed/juw6sPEGuEk",
+        "order": 2
+      },
+      {
+        "id": "lesson_fundamentos_03",
+        "title": "Dados pessoais e informação sensível",
+        "video_url": "https://www.youtube.com/embed/Og9lf0StwVA",
+        "order": 3
+      },
+      {
+        "id": "lesson_fundamentos_04",
+        "title": "Segurança no computador e no telemóvel",
+        "video_url": "https://www.youtube.com/embed/Q9SEH1UOshE",
+        "order": 4
+      },
+      {
+        "id": "lesson_fundamentos_05",
+        "title": "Actualizações e manutenção segura",
+        "video_url": "https://www.youtube.com/embed/juw6sPEGuEk",
+        "order": 5
+      },
+      {
+        "id": "lesson_fundamentos_06",
+        "title": "Redes Wi-Fi e navegação segura",
+        "video_url": "https://www.youtube.com/embed/9NSMhMMOfZk",
+        "order": 6
+      },
+      {
+        "id": "lesson_fundamentos_07",
+        "title": "Downloads, ficheiros e aplicações",
+        "video_url": "https://www.youtube.com/embed/juw6sPEGuEk",
+        "order": 7
+      },
+      {
+        "id": "lesson_fundamentos_08",
+        "title": "Privacidade nas redes sociais",
+        "video_url": "https://www.youtube.com/embed/Og9lf0StwVA",
+        "order": 8
+      },
+      {
+        "id": "lesson_fundamentos_09",
+        "title": "Comportamentos seguros no dia a dia",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 9
+      },
+      {
+        "id": "lesson_fundamentos_10",
+        "title": "Como reagir perante um incidente",
+        "video_url": "https://www.youtube.com/embed/juw6sPEGuEk",
+        "order": 10
+      }
+    ],
+    "questions": [
+      {
+        "id": "question_fundamentos_01",
+        "question": "Qual é o principal objectivo da segurança digital?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Proteger sistemas, dados e pessoas contra riscos digitais"
+          },
+          {
+            "id": "b",
+            "text": "Partilhar todas as informações pessoais online"
+          },
+          {
+            "id": "c",
+            "text": "Eliminar todas as actualizações"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "A segurança digital procura reduzir riscos e proteger pessoas, dados e sistemas."
+      },
+      {
+        "id": "question_fundamentos_02",
+        "question": "Recebe uma mensagem inesperada com um link. Qual é a melhor primeira atitude?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Clicar para descobrir rapidamente"
+          },
+          {
+            "id": "b",
+            "text": "Parar e verificar a mensagem antes de agir"
+          },
+          {
+            "id": "c",
+            "text": "Enviar a mensagem para todos os contactos"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "Parar e verificar reduz o risco de cair numa tentativa de fraude ou phishing."
+      },
+      {
+        "id": "question_fundamentos_03",
+        "question": "Qual destes dados merece maior cuidado?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Uma cor favorita publicada num perfil"
+          },
+          {
+            "id": "b",
+            "text": "Uma imagem pública de uma paisagem"
+          },
+          {
+            "id": "c",
+            "text": "Uma palavra-passe de uma conta"
+          }
+        ],
+        "correct_answer": "c",
+        "explanation": "Credenciais de acesso são informação sensível e nunca devem ser partilhadas."
+      },
+      {
+        "id": "question_fundamentos_04",
+        "question": "Porque é importante manter aplicações e sistemas actualizados?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Para corrigir falhas e melhorar a segurança"
+          },
+          {
+            "id": "b",
+            "text": "Para remover todas as funcionalidades"
+          },
+          {
+            "id": "c",
+            "text": "Para tornar as palavras-passe públicas"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Actualizações frequentemente corrigem vulnerabilidades de segurança."
+      },
+      {
+        "id": "question_fundamentos_05",
+        "question": "Qual comportamento é mais seguro numa rede Wi-Fi pública?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Aceder livremente a todas as contas sem verificar a rede"
+          },
+          {
+            "id": "b",
+            "text": "Evitar operações sensíveis quando a rede não é confiável"
+          },
+          {
+            "id": "c",
+            "text": "Partilhar a palavra-passe da sua conta"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "Redes públicas podem apresentar riscos adicionais; operações sensíveis devem ser tratadas com cautela."
+      },
+      {
+        "id": "question_fundamentos_06",
+        "question": "Qual é um sinal de que uma aplicação pode representar risco?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Foi instalada de uma fonte oficial"
+          },
+          {
+            "id": "b",
+            "text": "Recebe actualizações oficiais"
+          },
+          {
+            "id": "c",
+            "text": "É obtida de uma fonte desconhecida e pede privilégios excessivos"
+          }
+        ],
+        "correct_answer": "c",
+        "explanation": "Fontes desconhecidas e pedidos inesperados de privilégios são sinais de risco."
+      },
+      {
+        "id": "question_fundamentos_07",
+        "question": "Qual é uma boa prática para proteger informação pessoal?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Partilhar apenas o necessário"
+          },
+          {
+            "id": "b",
+            "text": "Publicar tudo nas redes sociais"
+          },
+          {
+            "id": "c",
+            "text": "Enviar documentos sensíveis para desconhecidos"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Minimizar a exposição de informação reduz riscos de privacidade e abuso."
+      },
+      {
+        "id": "question_fundamentos_08",
+        "question": "O que deve fazer depois de suspeitar de um incidente de segurança?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Ignorar completamente o problema"
+          },
+          {
+            "id": "b",
+            "text": "Proteger a conta ou dispositivo e procurar ajuda adequada"
+          },
+          {
+            "id": "c",
+            "text": "Apagar todas as provas imediatamente"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "A resposta rápida e organizada ajuda a limitar danos e preservar informação útil."
+      },
+      {
+        "id": "question_fundamentos_09",
+        "question": "Qual afirmação sobre segurança digital é correcta?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Só empresas precisam de segurança digital"
+          },
+          {
+            "id": "b",
+            "text": "Apenas computadores podem ser atacados"
+          },
+          {
+            "id": "c",
+            "text": "Todos os utilizadores têm responsabilidade na redução de riscos"
+          }
+        ],
+        "correct_answer": "c",
+        "explanation": "A segurança digital depende também dos comportamentos de cada utilizador."
+      },
+      {
+        "id": "question_fundamentos_10",
+        "question": "Qual é a melhor mentalidade perante uma situação digital inesperada?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Parar, verificar e decidir antes de agir"
+          },
+          {
+            "id": "b",
+            "text": "Agir imediatamente para não perder a oportunidade"
+          },
+          {
+            "id": "c",
+            "text": "Confiar sempre na aparência da mensagem"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Parar e verificar é uma das atitudes mais importantes para evitar decisões impulsivas."
+      }
+    ],
+    "lessons_count": 10,
+    "questions_count": 10,
+    "updated_at": "2026-09-17T11:40:59"
+  },
+  {
+    "id": "course_contas_credenciais",
+    "title": "Protecção de Contas e Credenciais",
+    "description": "Aprenda a proteger palavras-passe, autenticação, e-mail, sessões e contas contra acessos não autorizados.",
+    "level": "Básico / Intermédio",
+    "published": true,
+    "lessons": [
+      {
+        "id": "lesson_credenciais_01",
+        "title": "Porque as contas são um alvo",
+        "video_url": "https://www.youtube.com/embed/nARrIdmE8BY",
+        "order": 1
+      },
+      {
+        "id": "lesson_credenciais_02",
+        "title": "Como criar palavras-passe fortes",
+        "video_url": "https://www.youtube.com/embed/g8LCsNjE1XQ",
+        "order": 2
+      },
+      {
+        "id": "lesson_credenciais_03",
+        "title": "Gestores de palavras-passe",
+        "video_url": "https://www.youtube.com/embed/nARrIdmE8BY",
+        "order": 3
+      },
+      {
+        "id": "lesson_credenciais_04",
+        "title": "Palavras-passe reutilizadas e ataques",
+        "video_url": "https://www.youtube.com/embed/nARrIdmE8BY",
+        "order": 4
+      },
+      {
+        "id": "lesson_credenciais_05",
+        "title": "Autenticação multifactor — MFA",
+        "video_url": "https://www.youtube.com/embed/nARrIdmE8BY",
+        "order": 5
+      },
+      {
+        "id": "lesson_credenciais_06",
+        "title": "Códigos de autenticação e recuperação",
+        "video_url": "https://www.youtube.com/embed/nARrIdmE8BY",
+        "order": 6
+      },
+      {
+        "id": "lesson_credenciais_07",
+        "title": "Sessões, dispositivos e contas conectadas",
+        "video_url": "https://www.youtube.com/embed/Q9SEH1UOshE",
+        "order": 7
+      },
+      {
+        "id": "lesson_credenciais_08",
+        "title": "Segurança do e-mail",
+        "video_url": "https://www.youtube.com/embed/Og9lf0StwVA",
+        "order": 8
+      },
+      {
+        "id": "lesson_credenciais_09",
+        "title": "Contas comprometidas",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 9
+      },
+      {
+        "id": "lesson_credenciais_10",
+        "title": "Plano de protecção das suas contas",
+        "video_url": "https://www.youtube.com/embed/nARrIdmE8BY",
+        "order": 10
+      }
+    ],
+    "questions": [
+      {
+        "id": "question_credenciais_01",
+        "question": "Qual é uma boa característica de uma palavra-passe?",
+        "options": [
+          {
+            "id": "a",
+            "text": "É curta e igual em todos os serviços"
+          },
+          {
+            "id": "b",
+            "text": "É longa, única e difícil de adivinhar"
+          },
+          {
+            "id": "c",
+            "text": "É o nome do utilizador"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "Palavras-passe longas e únicas reduzem o risco de comprometimento."
+      },
+      {
+        "id": "question_credenciais_02",
+        "question": "Porque é perigoso reutilizar a mesma palavra-passe?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Um comprometimento pode afectar várias contas"
+          },
+          {
+            "id": "b",
+            "text": "Porque impede qualquer login"
+          },
+          {
+            "id": "c",
+            "text": "Porque torna o e-mail mais lento"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Quando uma palavra-passe é exposta, todas as contas que a reutilizam ficam em risco."
+      },
+      {
+        "id": "question_credenciais_03",
+        "question": "Qual é a principal vantagem de um gestor de palavras-passe?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Permite usar palavras-passe únicas sem memorizar todas"
+          },
+          {
+            "id": "b",
+            "text": "Partilha automaticamente todas as palavras-passe"
+          },
+          {
+            "id": "c",
+            "text": "Remove a necessidade de autenticação"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Gestores ajudam a criar e guardar credenciais fortes e únicas."
+      },
+      {
+        "id": "question_credenciais_04",
+        "question": "Recebe um código MFA que não solicitou. O que deve fazer?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Partilhar o código com quem o enviou"
+          },
+          {
+            "id": "b",
+            "text": "Ignorar e continuar a usar a conta normalmente"
+          },
+          {
+            "id": "c",
+            "text": "Tratar o evento como suspeito e proteger a conta"
+          }
+        ],
+        "correct_answer": "c",
+        "explanation": "Um código inesperado pode indicar uma tentativa de acesso à conta."
+      },
+      {
+        "id": "question_credenciais_05",
+        "question": "O que acrescenta a autenticação multifactor?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Uma camada adicional de verificação"
+          },
+          {
+            "id": "b",
+            "text": "Uma palavra-passe pública"
+          },
+          {
+            "id": "c",
+            "text": "A remoção da palavra-passe"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "MFA adiciona um segundo factor ou mecanismo de verificação."
+      },
+      {
+        "id": "question_credenciais_06",
+        "question": "Qual destas informações nunca deve ser partilhada?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Um código de autenticação recebido para a sua conta"
+          },
+          {
+            "id": "b",
+            "text": "O nome de uma aplicação pública"
+          },
+          {
+            "id": "c",
+            "text": "O endereço de um website oficial"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Códigos de autenticação são credenciais temporárias e devem permanecer privados."
+      },
+      {
+        "id": "question_credenciais_07",
+        "question": "O que deve fazer ao encontrar uma sessão desconhecida na sua conta?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Ignorar"
+          },
+          {
+            "id": "b",
+            "text": "Proteger a conta e terminar a sessão desconhecida"
+          },
+          {
+            "id": "c",
+            "text": "Publicar a informação nas redes sociais"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "Uma sessão desconhecida deve ser investigada e encerrada através dos mecanismos oficiais."
+      },
+      {
+        "id": "question_credenciais_08",
+        "question": "Qual é uma boa prática para o e-mail?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Usar uma palavra-passe única e MFA quando disponível"
+          },
+          {
+            "id": "b",
+            "text": "Usar a mesma palavra-passe do banco"
+          },
+          {
+            "id": "c",
+            "text": "Partilhar códigos de recuperação"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "O e-mail frequentemente permite recuperar outras contas, tornando-o especialmente importante."
+      },
+      {
+        "id": "question_credenciais_09",
+        "question": "O que fazer perante sinais de comprometimento de uma conta?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Continuar a utilizá-la normalmente"
+          },
+          {
+            "id": "b",
+            "text": "Proteger a conta, alterar credenciais e verificar actividade"
+          },
+          {
+            "id": "c",
+            "text": "Partilhar a palavra-passe antiga"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "A resposta deve limitar o acesso indevido e investigar a actividade suspeita."
+      },
+      {
+        "id": "question_credenciais_10",
+        "question": "Qual é a melhor estratégia geral para proteger contas?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Uma única palavra-passe para tudo"
+          },
+          {
+            "id": "b",
+            "text": "Evitar qualquer actualização"
+          },
+          {
+            "id": "c",
+            "text": "Credenciais únicas, MFA e recuperação segura"
+          }
+        ],
+        "correct_answer": "c",
+        "explanation": "A combinação de credenciais únicas, MFA e mecanismos de recuperação fortalece a conta."
+      }
+    ],
+    "lessons_count": 10,
+    "questions_count": 10
+  },
+  {
+    "id": "course_phishing",
+    "title": "Reconhecimento e Defesa contra Phishing",
+    "description": "Aprenda a identificar e responder a e-mails, links, páginas, mensagens e outras tentativas de phishing.",
+    "level": "Intermédio",
+    "published": true,
+    "lessons": [
+      {
+        "id": "lesson_phishing_01",
+        "title": "O que é Phishing",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 1
+      },
+      {
+        "id": "lesson_phishing_02",
+        "title": "Como funciona um ataque de Phishing",
+        "video_url": "https://www.youtube.com/embed/-0Ql6xnNj7g",
+        "order": 2
+      },
+      {
+        "id": "lesson_phishing_03",
+        "title": "Anatomia de um e-mail falso",
+        "video_url": "https://www.youtube.com/embed/Og9lf0StwVA",
+        "order": 3
+      },
+      {
+        "id": "lesson_phishing_04",
+        "title": "Links maliciosos e URLs falsos",
+        "video_url": "https://www.youtube.com/embed/-0Ql6xnNj7g",
+        "order": 4
+      },
+      {
+        "id": "lesson_phishing_05",
+        "title": "Páginas de login falsas",
+        "video_url": "https://www.youtube.com/embed/-0Ql6xnNj7g",
+        "order": 5
+      },
+      {
+        "id": "lesson_phishing_06",
+        "title": "Anexos perigosos",
+        "video_url": "https://www.youtube.com/embed/juw6sPEGuEk",
+        "order": 6
+      },
+      {
+        "id": "lesson_phishing_07",
+        "title": "Phishing através das redes sociais",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 7
+      },
+      {
+        "id": "lesson_phishing_08",
+        "title": "Smishing — phishing por SMS",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 8
+      },
+      {
+        "id": "lesson_phishing_09",
+        "title": "Como verificar uma mensagem suspeita",
+        "video_url": "https://www.youtube.com/embed/-0Ql6xnNj7g",
+        "order": 9
+      },
+      {
+        "id": "lesson_phishing_10",
+        "title": "O que fazer depois de clicar",
+        "video_url": "https://www.youtube.com/embed/-0Ql6xnNj7g",
+        "order": 10
+      }
+    ],
+    "questions": [
+      {
+        "id": "question_phishing_01",
+        "question": "O que é Phishing?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Uma tentativa de enganar alguém para obter informação ou provocar uma acção"
+          },
+          {
+            "id": "b",
+            "text": "Uma actualização normal do sistema"
+          },
+          {
+            "id": "c",
+            "text": "Uma cópia de segurança"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Phishing utiliza engenharia de confiança para levar a vítima a revelar informação ou realizar uma acção."
+      },
+      {
+        "id": "question_phishing_02",
+        "question": "Qual é um sinal comum de phishing?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Uma mensagem que cria urgência e pede informação sensível"
+          },
+          {
+            "id": "b",
+            "text": "Uma mensagem esperada de uma fonte confirmada"
+          },
+          {
+            "id": "c",
+            "text": "Uma notificação normal do sistema"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Urgência artificial e pedidos de informação sensível são sinais frequentes."
+      },
+      {
+        "id": "question_phishing_03",
+        "question": "Ao receber um e-mail suspeito, o que deve verificar?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Remetente, contexto, links e pedido efectuado"
+          },
+          {
+            "id": "b",
+            "text": "Apenas o logótipo"
+          },
+          {
+            "id": "c",
+            "text": "Apenas a cor da mensagem"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Uma análise deve considerar vários sinais e não apenas a aparência."
+      },
+      {
+        "id": "question_phishing_04",
+        "question": "Um link apresenta um nome conhecido, mas o endereço real é estranho. O que fazer?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Clicar imediatamente"
+          },
+          {
+            "id": "b",
+            "text": "Verificar o endereço antes de continuar"
+          },
+          {
+            "id": "c",
+            "text": "Enviar o link aos contactos"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "O destino real do link é uma pista importante para detectar phishing."
+      },
+      {
+        "id": "question_phishing_05",
+        "question": "Uma página de login pede a sua palavra-passe após clicar num link inesperado. Qual é a melhor decisão?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Introduzir imediatamente"
+          },
+          {
+            "id": "b",
+            "text": "Guardar a palavra-passe na página"
+          },
+          {
+            "id": "c",
+            "text": "Não introduzir e verificar a origem por um canal oficial"
+          }
+        ],
+        "correct_answer": "c",
+        "explanation": "Páginas falsas podem imitar serviços legítimos para capturar credenciais."
+      },
+      {
+        "id": "question_phishing_06",
+        "question": "Qual é a abordagem mais segura perante um anexo inesperado?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Abrir imediatamente"
+          },
+          {
+            "id": "b",
+            "text": "Verificar a origem e o contexto antes de abrir"
+          },
+          {
+            "id": "c",
+            "text": "Reencaminhar para todos"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "Anexos inesperados podem transportar conteúdo malicioso."
+      },
+      {
+        "id": "question_phishing_07",
+        "question": "Phishing pode ocorrer através de redes sociais?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Não, nunca"
+          },
+          {
+            "id": "b",
+            "text": "Sim, através de mensagens, links e perfis falsos"
+          },
+          {
+            "id": "c",
+            "text": "Só através de correio físico"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "Phishing pode ocorrer em várias plataformas digitais."
+      },
+      {
+        "id": "question_phishing_08",
+        "question": "O que é Smishing?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Phishing através de mensagens SMS ou aplicações de mensagens"
+          },
+          {
+            "id": "b",
+            "text": "Um tipo de backup"
+          },
+          {
+            "id": "c",
+            "text": "Uma actualização do navegador"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Smishing é a utilização de mensagens para realizar ataques de phishing."
+      },
+      {
+        "id": "question_phishing_09",
+        "question": "Qual é a melhor resposta a uma mensagem suspeita?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Parar, verificar e utilizar um canal oficial para confirmar"
+          },
+          {
+            "id": "b",
+            "text": "Responder com os seus dados"
+          },
+          {
+            "id": "c",
+            "text": "Clicar rapidamente"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "A confirmação por um canal oficial reduz o risco de confiar numa mensagem falsa."
+      },
+      {
+        "id": "question_phishing_10",
+        "question": "Se clicou num link suspeito, qual deve ser a prioridade?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Ignorar sempre o incidente"
+          },
+          {
+            "id": "b",
+            "text": "Proteger a conta ou dispositivo e avaliar o que aconteceu"
+          },
+          {
+            "id": "c",
+            "text": "Partilhar o link com amigos"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "Uma resposta rápida pode limitar danos depois de uma interacção suspeita."
+      }
+    ],
+    "lessons_count": 10,
+    "questions_count": 10,
+    "updated_at": "2026-09-17T11:40:58"
+  },
+  {
+    "id": "course_engenharia_social",
+    "title": "Engenharia Social e Manipulação Digital",
+    "description": "Compreenda como atacantes exploram confiança, urgência, autoridade e emoções para manipular pessoas.",
+    "level": "Intermédio",
+    "published": true,
+    "lessons": [
+      {
+        "id": "lesson_engenharia_social_01",
+        "title": "O que é Engenharia Social",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 1
+      },
+      {
+        "id": "lesson_engenharia_social_02",
+        "title": "Porque as pessoas são manipuladas",
+        "video_url": "https://www.youtube.com/embed/Q9SEH1UOshE",
+        "order": 2
+      },
+      {
+        "id": "lesson_engenharia_social_03",
+        "title": "Pretexting",
+        "video_url": "https://www.youtube.com/embed/Og9lf0StwVA",
+        "order": 3
+      },
+      {
+        "id": "lesson_engenharia_social_04",
+        "title": "Impersonation",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 4
+      },
+      {
+        "id": "lesson_engenharia_social_05",
+        "title": "Vishing — chamadas fraudulentas",
+        "video_url": "https://www.youtube.com/embed/Og9lf0StwVA",
+        "order": 5
+      },
+      {
+        "id": "lesson_engenharia_social_06",
+        "title": "Smishing e mensagens manipuladoras",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 6
+      },
+      {
+        "id": "lesson_engenharia_social_07",
+        "title": "Urgência, medo e autoridade",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 7
+      },
+      {
+        "id": "lesson_engenharia_social_08",
+        "title": "Engenharia social nas redes sociais",
+        "video_url": "https://www.youtube.com/embed/Q9SEH1UOshE",
+        "order": 8
+      },
+      {
+        "id": "lesson_engenharia_social_09",
+        "title": "Como verificar uma identidade",
+        "video_url": "https://www.youtube.com/embed/Og9lf0StwVA",
+        "order": 9
+      },
+      {
+        "id": "lesson_engenharia_social_10",
+        "title": "Como interromper uma tentativa de manipulação",
+        "video_url": "https://www.youtube.com/embed/qpeesJMiBo4",
+        "order": 10
+      }
+    ],
+    "questions": [
+      {
+        "id": "question_engenharia_social_01",
+        "question": "O que caracteriza a Engenharia Social?",
+        "options": [
+          {
+            "id": "a",
+            "text": "A exploração de factores humanos para influenciar comportamentos"
+          },
+          {
+            "id": "b",
+            "text": "Apenas ataques técnicos automáticos"
+          },
+          {
+            "id": "c",
+            "text": "Uma actualização de software"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Engenharia social explora confiança, emoções, contexto e comportamento humano."
+      },
+      {
+        "id": "question_engenharia_social_02",
+        "question": "Porque a urgência pode ser usada por um atacante?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Para incentivar decisões rápidas sem verificação"
+          },
+          {
+            "id": "b",
+            "text": "Para melhorar a segurança"
+          },
+          {
+            "id": "c",
+            "text": "Para actualizar o computador"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "A pressão reduz o tempo disponível para pensar e verificar."
+      },
+      {
+        "id": "question_engenharia_social_03",
+        "question": "O que é pretexting?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Criar uma história ou contexto falso para obter cooperação"
+          },
+          {
+            "id": "b",
+            "text": "Fazer uma cópia de segurança"
+          },
+          {
+            "id": "c",
+            "text": "Actualizar uma aplicação"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "O atacante cria um pretexto plausível para influenciar a vítima."
+      },
+      {
+        "id": "question_engenharia_social_04",
+        "question": "O que significa impersonation num ataque?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Fingir ser outra pessoa ou entidade"
+          },
+          {
+            "id": "b",
+            "text": "Actualizar uma conta"
+          },
+          {
+            "id": "c",
+            "text": "Criar uma palavra-passe forte"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "O atacante assume uma identidade falsa para aumentar a confiança."
+      },
+      {
+        "id": "question_engenharia_social_05",
+        "question": "Recebe uma chamada de alguém que afirma ser do suporte técnico e pede o seu código MFA. O que fazer?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Fornecer o código para resolver rapidamente"
+          },
+          {
+            "id": "b",
+            "text": "Recusar e confirmar a identidade por um canal oficial"
+          },
+          {
+            "id": "c",
+            "text": "Publicar o código online"
+          }
+        ],
+        "correct_answer": "b",
+        "explanation": "Códigos MFA não devem ser fornecidos a terceiros."
+      },
+      {
+        "id": "question_engenharia_social_06",
+        "question": "Qual é um sinal de manipulação?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Pedido inesperado acompanhado de pressão ou ameaça"
+          },
+          {
+            "id": "b",
+            "text": "Pedido normal previamente combinado"
+          },
+          {
+            "id": "c",
+            "text": "Procedimento oficial conhecido"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Pressão, medo e pedidos inesperados podem indicar manipulação."
+      },
+      {
+        "id": "question_engenharia_social_07",
+        "question": "Como deve reagir quando alguém usa autoridade para pressioná-lo?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Verificar a identidade e o pedido"
+          },
+          {
+            "id": "b",
+            "text": "Obedecer imediatamente"
+          },
+          {
+            "id": "c",
+            "text": "Fornecer credenciais"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "A autoridade alegada não elimina a necessidade de verificação."
+      },
+      {
+        "id": "question_engenharia_social_08",
+        "question": "Porque as redes sociais podem ajudar um atacante?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Podem revelar informações usadas para criar pretextos convincentes"
+          },
+          {
+            "id": "b",
+            "text": "Impedem qualquer ataque"
+          },
+          {
+            "id": "c",
+            "text": "Eliminam a necessidade de palavras-passe"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Informação pública pode ser usada para personalizar uma tentativa de manipulação."
+      },
+      {
+        "id": "question_engenharia_social_09",
+        "question": "Como verificar uma identidade suspeita?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Usar um canal independente e oficial"
+          },
+          {
+            "id": "b",
+            "text": "Usar o número fornecido pelo suspeito"
+          },
+          {
+            "id": "c",
+            "text": "Confiar apenas na fotografia do perfil"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Um canal independente reduz a possibilidade de validar uma identidade falsa."
+      },
+      {
+        "id": "question_engenharia_social_10",
+        "question": "Qual é a melhor forma de interromper uma tentativa de manipulação?",
+        "options": [
+          {
+            "id": "a",
+            "text": "Parar a conversa, verificar e não fornecer informação sensível"
+          },
+          {
+            "id": "b",
+            "text": "Acelerar a decisão"
+          },
+          {
+            "id": "c",
+            "text": "Enviar credenciais"
+          }
+        ],
+        "correct_answer": "a",
+        "explanation": "Interromper a pressão devolve ao utilizador tempo para verificar a situação."
+      }
+    ],
+    "lessons_count": 10,
+    "questions_count": 10,
+    "updated_at": "2026-09-17T13:10:47.122241+00:00"
+  },
+  {
+    "id": "course_admin_868c2013580241359ca83a84fa324c1c",
+    "title": "jxjcc",
+    "description": "cjjcj",
+    "published": true,
+    "link": "https://www.youtube.com/",
+    "videos": [
+      {
+        "id": "video_239525b77ce64d79b78f37d719019fd4",
+        "title": "jccjcj",
+        "description": "cjcjjc",
+        "link": "https://youtu.be/jSL7p1J-2MY"
+      }
+    ],
+    "questions": [
+      {
+        "id": "question_a8237ca4c1e840e689de477befdf2093",
+        "question": "DGGDGD",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 0,
+        "explanation": ""
+      },
+      {
+        "id": "question_5cd4472e25464b71b16e2772bb686b53",
+        "question": "CDDDD",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 0,
+        "explanation": ""
+      },
+      {
+        "id": "question_732e6528ec6c4f699f5477b7616bf3ac",
+        "question": "GDHDJD",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 3,
+        "explanation": ""
+      },
+      {
+        "id": "question_7ff4a9b937604837aad6093696ce1fdc",
+        "question": "AJDJDJD",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 3,
+        "explanation": ""
+      },
+      {
+        "id": "question_6d8f28fad4754fd2bf45a0bcc4b0cc5b",
+        "question": "BBDHDJ",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 0,
+        "explanation": ""
+      },
+      {
+        "id": "question_ba44414c47a940b9a033844b44564152",
+        "question": "ABABB",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 0,
+        "explanation": ""
+      },
+      {
+        "id": "question_53d0883f02ab47f8afec9c58383724aa",
+        "question": "FFFF",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 0,
+        "explanation": ""
+      },
+      {
+        "id": "question_dcdd524b911f4460a621a7da862765ad",
+        "question": "GGG",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 0,
+        "explanation": ""
+      },
+      {
+        "id": "question_5d913f0c7b244123af07c252bb0fea46",
+        "question": "GGG",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 0,
+        "explanation": ""
+      },
+      {
+        "id": "question_9cfaa8de62ed43859eca788426719288",
+        "question": "jdjjdjd",
+        "options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "correct_answer": 0,
+        "explanation": ""
+      }
+    ],
+    "lessons": [],
+    "created_at": "2026-09-17T13:06:21.960494+00:00",
+    "updated_at": "2026-09-17T13:16:41.245543+00:00"
+  }
+]

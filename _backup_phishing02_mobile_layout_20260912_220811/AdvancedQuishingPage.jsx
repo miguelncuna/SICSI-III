@@ -1,0 +1,1680 @@
+﻿import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  FileCheck2,
+  Globe2,
+  Inbox,
+  LoaderCircle,
+  LockKeyhole,
+  Mail,
+  Menu,
+  QrCode,
+  RefreshCw,
+  ShieldAlert,
+  Smartphone,
+  UserRound,
+  X,
+  XCircle,
+} from "lucide-react";
+import { simulationService } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+
+function QrCodeVisual() {
+  const cells = [];
+
+  for (let row = 0; row < 21; row += 1) {
+    for (let col = 0; col < 21; col += 1) {
+      const finder = (startRow, startCol) => {
+        if (
+          row < startRow ||
+          row >= startRow + 7 ||
+          col < startCol ||
+          col >= startCol + 7
+        ) {
+          return null;
+        }
+
+        const outer =
+          row === startRow ||
+          row === startRow + 6 ||
+          col === startCol ||
+          col === startCol + 6;
+
+        const inner =
+          row >= startRow + 2 &&
+          row <= startRow + 4 &&
+          col >= startCol + 2 &&
+          col <= startCol + 4;
+
+        return outer || inner;
+      };
+
+      const a = finder(0, 0);
+      const b = finder(0, 14);
+      const c = finder(14, 0);
+
+      let filled =
+        ((row * 19 + col * 29 + row * col * 5) % 9) < 4;
+
+      if (a !== null) filled = a;
+      if (b !== null) filled = b;
+      if (c !== null) filled = c;
+
+      cells.push(
+        <span
+          key={`${row}-${col}`}
+          className={`aspect-square ${
+            filled ? "bg-slate-950" : "bg-white"
+          }`}
+        />
+      );
+    }
+  }
+
+  return (
+    <div className="rounded-[1.4rem] bg-white p-4 shadow-inner ring-1 ring-slate-200">
+      <div className="grid grid-cols-[repeat(21,minmax(0,1fr))] gap-[2px]">
+        {cells}
+      </div>
+    </div>
+  );
+}
+
+function PhoneFrame({ children }) {
+  return (
+    <div className="mx-auto w-full max-w-[430px] rounded-[2.3rem] border-[8px] border-slate-950 bg-slate-950 p-1 shadow-2xl shadow-slate-950/20">
+      <div className="overflow-hidden rounded-[1.8rem] bg-white">
+        <div className="flex items-center justify-between bg-slate-950 px-5 py-2.5 text-[11px] font-bold text-white">
+          <span>09:41</span>
+          <div className="h-1.5 w-20 rounded-full bg-slate-700" />
+          <span>5G</span>
+        </div>
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function PortalBrand() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+        <span className="text-sm font-black">PA</span>
+      </div>
+
+      <div>
+        <p className="text-sm font-black text-slate-950">
+          Portal Académico
+        </p>
+
+        <p className="text-[11px] text-slate-400">
+          Acesso do estudante
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function BrowserChrome({
+  url,
+}) {
+  return (
+    <div className="border-b border-slate-200 bg-slate-50">
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-2 text-slate-400">
+          <ArrowLeft className="h-4 w-4" />
+          <ArrowRight className="h-4 w-4 opacity-40" />
+        </div>
+
+        <div className="mx-3 flex min-w-0 flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2">
+          <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+
+          <span className="truncate text-[11px] font-semibold text-slate-600">
+            {url}
+          </span>
+        </div>
+
+        <Menu className="h-4 w-4 shrink-0 text-slate-400" />
+      </div>
+    </div>
+  );
+}
+
+function EndSimulationModal({
+  onCancel,
+  onConfirm,
+  busy,
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm">
+      <div
+        className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="phishing02-end-title"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-600">
+              Encerramento
+            </p>
+
+            <h2
+              id="phishing02-end-title"
+              className="mt-2 text-xl font-black text-slate-950"
+            >
+              Encerrar simulação?
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:opacity-50"
+            aria-label="Fechar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-6">
+          <p className="text-sm leading-6 text-slate-600">
+            O percurso desta experiência será interrompido.
+          </p>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold leading-5 text-slate-600">
+              Ao confirmar, a sessão temporária desta jornada será encerrada.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+              className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-700 transition hover:border-slate-400 disabled:opacity-50"
+            >
+              Continuar simulação
+            </button>
+
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+            >
+              <XCircle className="h-4 w-4" />
+              Encerrar simulação
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScenarioSystemState({
+  state,
+}) {
+  return (
+    <div className="bg-slate-100 p-4 sm:p-8">
+      <PhoneFrame>
+        <div className="min-h-[520px]">
+          <BrowserChrome url={state.url} />
+
+          <div className="p-5 sm:p-6">
+            {state.brand && (
+              <div className="mb-5">
+                <PortalBrand />
+              </div>
+            )}
+
+            <div
+              className={`rounded-3xl border p-6 ${
+                state.kind === "danger"
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100">
+                  {state.loading ? (
+                    <LoaderCircle className="h-5 w-5 animate-spin text-blue-600" />
+                  ) : state.kind === "danger" ? (
+                    <ShieldAlert className="h-5 w-5 text-amber-600" />
+                  ) : (
+                    <CheckCircle2 className="h-5 w-5 text-slate-600" />
+                  )}
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                    {state.label}
+                  </p>
+
+                  <h2 className="mt-1 text-xl font-black leading-tight text-slate-950">
+                    {state.title}
+                  </h2>
+                </div>
+              </div>
+
+              <p className="mt-5 text-sm leading-7 text-slate-700">
+                {state.message}
+              </p>
+
+              {state.detail && (
+                <p className="mt-3 text-xs leading-6 text-slate-500">
+                  {state.detail}
+                </p>
+              )}
+
+              {state.loading && (
+                <div className="mt-5 space-y-2">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full w-2/3 animate-pulse rounded-full bg-blue-500" />
+                  </div>
+
+                  <p className="text-[11px] font-semibold text-slate-400">
+                    A processar o pedido...
+                  </p>
+                </div>
+              )}
+
+              {state.rows && (
+                <div className="mt-5 space-y-2">
+                  {state.rows.map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3"
+                    >
+                      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                        {row.label}
+                      </span>
+
+                      <span className="text-xs font-bold text-slate-700">
+                        {row.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </PhoneFrame>
+    </div>
+  );
+}
+
+function FinalNavigation({
+  onNext,
+  onEnd,
+}) {
+  return (
+    <div className="mx-auto mt-5 w-full max-w-6xl border-t border-slate-200 px-3 pb-8 pt-5 sm:px-5">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-slate-800">
+              O seu percurso está a ser registado.
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Esta experiência terminou. Pode continuar a jornada.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={onEnd}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-5 py-3 text-sm font-bold text-red-700 transition hover:bg-red-50"
+            >
+              <XCircle className="h-4 w-4" />
+              Encerrar simulação
+            </button>
+
+            <button
+              type="button"
+              onClick={onNext}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+            >
+              Próxima simulação
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AdvancedQuishingPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [simulation, setSimulation] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const [step, setStep] = useState("email");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [emailInspection, setEmailInspection] =
+    useState(false);
+
+  const [urlInspection, setUrlInspection] =
+    useState(false);
+
+  const [scenarioState, setScenarioState] =
+    useState(null);
+
+  const [scenarioFinished, setScenarioFinished] =
+    useState(false);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const [showEndModal, setShowEndModal] =
+    useState(false);
+
+  const [finishSent, setFinishSent] =
+    useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    simulationService
+      .get("phishing-02")
+      .then((data) => {
+        if (!active) return;
+
+        setSimulation(data);
+      })
+      .catch((err) => {
+        if (!active) return;
+
+        setError(
+          err?.message ||
+            "Não foi possível carregar a simulação."
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function recordAction(
+    action,
+    stepId,
+    interactionType,
+    details = {}
+  ) {
+    if (busy) return false;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      await simulationService.evaluate(
+        "phishing-02",
+        action,
+        user?.id,
+        stepId,
+        interactionType,
+        details
+      );
+
+      return true;
+    } catch (err) {
+      setError(
+        err?.message ||
+          "Não foi possível registar esta interacção."
+      );
+
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function endScenarioAfter(ms = 1200) {
+    window.setTimeout(() => {
+      setScenarioFinished(true);
+    }, ms);
+  }
+
+  async function inspectSender() {
+    const ok = await recordAction(
+      "inspect_sender",
+      "step_01",
+      "inspect_sender"
+    );
+
+    if (!ok) return;
+
+    setEmailInspection((value) => !value);
+  }
+
+  async function openQrAccess() {
+    const ok = await recordAction(
+      "open_link",
+      "step_01",
+      "link"
+    );
+
+    if (!ok) return;
+
+    setEmailInspection(false);
+    setScenarioState(null);
+    setStep("mobile");
+  }
+
+  async function reportEmail() {
+    const ok = await recordAction(
+      "report",
+      "step_01",
+      "report"
+    );
+
+    if (!ok) return;
+
+    setScenarioState({
+      kind: "safe",
+      loading: true,
+      label: "Centro de mensagens",
+      title: "A encaminhar a mensagem",
+      message:
+        "A sua comunicação está a ser encaminhada para processamento.",
+      detail:
+        "O pedido foi recebido pelo serviço de mensagens.",
+      url: "mail://caixa-de-entrada/mensagens",
+    });
+
+    window.setTimeout(() => {
+      setScenarioState({
+        kind: "safe",
+        loading: false,
+        label: "Centro de mensagens",
+        title: "Mensagem encaminhada",
+        message:
+          "A comunicação foi recebida pelo serviço responsável.",
+        detail:
+          "O pedido foi processado e a sessão actual foi encerrada.",
+        url: "mail://caixa-de-entrada/estado",
+        rows: [
+          {
+            label: "Estado",
+            value: "Processado",
+          },
+          {
+            label: "Pedido",
+            value: "Recebido",
+          },
+          {
+            label: "Sessão",
+            value: "Encerrada",
+          },
+        ],
+      });
+
+      endScenarioAfter(900);
+    }, 1500);
+  }
+
+  async function inspectMobileUrl() {
+    const ok = await recordAction(
+      "inspect_url",
+      "step_02",
+      "inspect_url"
+    );
+
+    if (!ok) return;
+
+    setUrlInspection((value) => !value);
+  }
+
+  async function continueMobile() {
+    const ok = await recordAction(
+      "open_link",
+      "step_02",
+      "link"
+    );
+
+    if (!ok) return;
+
+    setUrlInspection(false);
+    setStep("login");
+  }
+
+  async function leaveMobile() {
+    const ok = await recordAction(
+      "leave_page",
+      "step_02",
+      "leave_page"
+    );
+
+    if (!ok) return;
+
+    setScenarioState({
+      kind: "safe",
+      loading: true,
+      label: "Navegador móvel",
+      title: "A terminar a sessão",
+      message:
+        "A ligação com o portal está a ser encerrada.",
+      detail:
+        "Aguarde enquanto o pedido é processado.",
+      url: "https://portal-aluno-verify.example/acesso",
+    });
+
+    window.setTimeout(() => {
+      setScenarioState({
+        kind: "safe",
+        loading: false,
+        label: "Navegador móvel",
+        title: "Sessão encerrada",
+        message:
+          "A ligação com o portal foi terminada.",
+        detail:
+          "A página actual deixou de estar disponível.",
+        url: "https://portal-aluno-verify.example/sair",
+        rows: [
+          {
+            label: "Sessão",
+            value: "Terminada",
+          },
+          {
+            label: "Ligação",
+            value: "Encerrada",
+          },
+        ],
+      });
+
+      endScenarioAfter(900);
+    }, 1350);
+  }
+
+  async function reportMobile() {
+    const ok = await recordAction(
+      "report",
+      "step_02",
+      "report"
+    );
+
+    if (!ok) return;
+
+    setScenarioState({
+      kind: "safe",
+      loading: true,
+      label: "Portal Académico",
+      title: "A enviar a ocorrência",
+      message:
+        "O pedido está a ser enviado para o serviço responsável.",
+      detail:
+        "A comunicação permanece aberta enquanto o pedido é processado.",
+      url: "https://portal-aluno-verify.example/ocorrencia",
+    });
+
+    window.setTimeout(() => {
+      setScenarioState({
+        kind: "safe",
+        loading: false,
+        label: "Portal Académico",
+        title: "Pedido recebido",
+        message:
+          "A ocorrência foi recebida pelo sistema.",
+        detail:
+          "A sessão actual foi encerrada.",
+        url: "https://portal-aluno-verify.example/ocorrencia/estado",
+        rows: [
+          {
+            label: "Estado",
+            value: "Recebido",
+          },
+          {
+            label: "Processamento",
+            value: "Concluído",
+          },
+          {
+            label: "Sessão",
+            value: "Encerrada",
+          },
+        ],
+      });
+
+      endScenarioAfter(900);
+    }, 1500);
+  }
+
+  async function inspectLoginUrl() {
+    const ok = await recordAction(
+      "inspect_url",
+      "step_03",
+      "inspect_url"
+    );
+
+    if (!ok) return;
+
+    setUrlInspection((value) => !value);
+  }
+
+  async function submitCredentials(event) {
+    event.preventDefault();
+
+    if (busy) return;
+
+    const ok = await recordAction(
+      "credentials",
+      "step_03",
+      "credentials",
+      {
+        email_value: email,
+        password_entered: true,
+      }
+    );
+
+    if (!ok) return;
+
+    setUrlInspection(false);
+
+    setScenarioState({
+      kind: "danger",
+      loading: true,
+      label: "Portal do Estudante",
+      title: "A confirmar os seus dados",
+      message:
+        "Estamos a confirmar os seus dados. Aguarde alguns instantes.",
+      detail:
+        "O pedido foi recebido pelo serviço de autenticação.",
+      url: "https://portal-aluno-verify.example/acesso",
+      brand: true,
+    });
+
+    window.setTimeout(() => {
+      setScenarioState({
+        kind: "danger",
+        loading: false,
+        label: "Portal do Estudante",
+        title: "Serviço temporariamente indisponível",
+        message:
+          "Pedimos desculpa, mas a página está temporariamente indisponível.",
+        detail:
+          "Não foi possível concluir o pedido neste momento. Tente novamente mais tarde.",
+        url: "https://portal-aluno-verify.example/acesso",
+        brand: true,
+        rows: [
+          {
+            label: "Serviço",
+            value: "Indisponível",
+          },
+          {
+            label: "Pedido",
+            value: "Não concluído",
+          },
+          {
+            label: "Estado",
+            value: "Tente novamente",
+          },
+        ],
+      });
+
+      endScenarioAfter(1100);
+    }, 1800);
+  }
+
+  async function leaveLogin() {
+    const ok = await recordAction(
+      "leave_page",
+      "step_03",
+      "leave_page"
+    );
+
+    if (!ok) return;
+
+    setScenarioState({
+      kind: "safe",
+      loading: true,
+      label: "Portal do Estudante",
+      title: "A terminar a sessão",
+      message:
+        "A sessão de autenticação está a ser encerrada.",
+      detail:
+        "Aguarde enquanto a ligação é terminada.",
+      url: "https://portal-aluno-verify.example/acesso",
+      brand: true,
+    });
+
+    window.setTimeout(() => {
+      setScenarioState({
+        kind: "safe",
+        loading: false,
+        label: "Portal do Estudante",
+        title: "Sessão terminada",
+        message:
+          "A sessão foi terminada com sucesso.",
+        detail:
+          "A ligação com o portal foi encerrada.",
+        url: "https://portal-aluno-verify.example/sair",
+        brand: true,
+        rows: [
+          {
+            label: "Sessão",
+            value: "Terminada",
+          },
+          {
+            label: "Portal",
+            value: "Desconectado",
+          },
+        ],
+      });
+
+      endScenarioAfter(900);
+    }, 1300);
+  }
+
+  async function reportLogin() {
+    const ok = await recordAction(
+      "report",
+      "step_03",
+      "report"
+    );
+
+    if (!ok) return;
+
+    setScenarioState({
+      kind: "safe",
+      loading: true,
+      label: "Portal do Estudante",
+      title: "A encaminhar o pedido",
+      message:
+        "A página está a ser encaminhada para análise.",
+      detail:
+        "O pedido permanece em processamento.",
+      url: "https://portal-aluno-verify.example/analise",
+      brand: true,
+    });
+
+    window.setTimeout(() => {
+      setScenarioState({
+        kind: "safe",
+        loading: false,
+        label: "Portal do Estudante",
+        title: "Pedido recebido",
+        message:
+          "A comunicação foi recebida pelo serviço responsável.",
+        detail:
+          "A sessão actual foi encerrada.",
+        url: "https://portal-aluno-verify.example/analise/estado",
+        brand: true,
+        rows: [
+          {
+            label: "Pedido",
+            value: "Recebido",
+          },
+          {
+            label: "Análise",
+            value: "Pendente",
+          },
+          {
+            label: "Sessão",
+            value: "Encerrada",
+          },
+        ],
+      });
+
+      endScenarioAfter(900);
+    }, 1400);
+  }
+
+  useEffect(() => {
+    if (!scenarioFinished || finishSent) return;
+
+    let active = true;
+
+    async function finishSimulation() {
+      try {
+        await simulationService.evaluate(
+          "phishing-02",
+          "finish",
+          user?.id,
+          "step_04",
+          "finish"
+        );
+
+        if (active) {
+          setFinishSent(true);
+        }
+      } catch (err) {
+        if (active) {
+          setError(
+            err?.message ||
+              "Não foi possível concluir o registo da experiência."
+          );
+        }
+      }
+    }
+
+    finishSimulation();
+
+    return () => {
+      active = false;
+    };
+  }, [scenarioFinished, finishSent, user?.id]);
+
+  function handleNextSimulation() {
+    navigate("/student/simulacoes/phishing-03");
+  }
+
+  function handleEndSimulation() {
+    setShowEndModal(true);
+  }
+
+  async function confirmEndSimulation() {
+    if (busy) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      await simulationService.clearPhishingResult(
+        user?.id
+      );
+
+      setShowEndModal(false);
+      navigate("/student/simulacoes");
+    } catch (err) {
+      setError(
+        err?.message ||
+          "Não foi possível encerrar a experiência."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-5 sm:p-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-xl">
+            <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-blue-600" />
+
+            <p className="mt-4 text-sm font-semibold text-slate-500">
+              A preparar a experiência...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!simulation) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-5 sm:p-8">
+        <div className="mx-auto max-w-4xl rounded-3xl border border-red-200 bg-red-50 p-8">
+          <ShieldAlert className="h-9 w-9 text-red-600" />
+
+          <h1 className="mt-4 text-2xl font-black text-slate-950">
+            Simulação indisponível
+          </h1>
+
+          <p className="mt-2 text-sm leading-6 text-red-700">
+            {error ||
+              "Não foi possível carregar o Phishing 02."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const mobile = simulation.mobile || {};
+  const login = simulation.login || {};
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/student/simulacoes")
+            }
+            className="inline-flex w-fit items-center gap-2 rounded-xl px-2 py-2 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-blue-700"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar às simulações
+          </button>
+
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">
+              Phishing 02
+            </span>
+
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-500">
+              QR Code
+            </span>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl">
+          <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 px-5 py-6 text-white sm:px-7">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100">
+                  Experiência interactiva
+                </p>
+
+                <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
+                  {simulation.title}
+                </h1>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100">
+                  {simulation.context}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-100">
+                  Estado
+                </p>
+
+                <p className="mt-1 text-sm font-bold">
+                  {scenarioFinished
+                    ? "Percurso concluído"
+                    : "Em curso"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+            <div className="flex items-center gap-2 overflow-x-auto">
+              {[
+                ["email", "Mensagem"],
+                ["mobile", "Móvel"],
+                ["login", "Portal"],
+              ].map(([value, label], index) => {
+                const current =
+                  !scenarioState &&
+                  !scenarioFinished &&
+                  step === value;
+
+                const completed =
+                  scenarioState ||
+                  scenarioFinished
+                    ? value === "email" ||
+                      (value === "mobile" &&
+                        ["login"].includes(step)) ||
+                      (value === "login" &&
+                        scenarioState)
+                    : value === "email" &&
+                      step !== "email";
+
+                return (
+                  <div
+                    key={value}
+                    className="flex shrink-0 items-center gap-2"
+                  >
+                    <div
+                      className={`flex items-center gap-2 rounded-full border px-3 py-2 ${
+                        current
+                          ? "border-blue-200 bg-blue-50 text-blue-700"
+                          : completed
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-slate-200 bg-white text-slate-400"
+                      }`}
+                    >
+                      <span className="text-[10px] font-black">
+                        0{index + 1}
+                      </span>
+
+                      <span className="text-[11px] font-bold">
+                        {label}
+                      </span>
+                    </div>
+
+                    {index < 2 && (
+                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />
+                    )}
+                  </div>
+                );
+              })}
+
+              <div className="ml-auto hidden items-center gap-2 sm:flex">
+                <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      scenarioFinished
+                        ? "w-full bg-emerald-500"
+                        : step === "email"
+                          ? "w-1/3 bg-blue-600"
+                          : step === "mobile"
+                            ? "w-2/3 bg-blue-600"
+                            : "w-5/6 bg-blue-600"
+                    }`}
+                  />
+                </div>
+
+                <span className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                  2 / 5
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section className="mt-5 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-7">
+            <div className="flex items-center gap-3">
+              {scenarioState ? (
+                <Clock3 className="h-5 w-5 text-slate-600" />
+              ) : step === "email" ? (
+                <Inbox className="h-5 w-5 text-blue-600" />
+              ) : step === "mobile" ? (
+                <Smartphone className="h-5 w-5 text-blue-600" />
+              ) : (
+                <LockKeyhole className="h-5 w-5 text-blue-600" />
+              )}
+
+              <div>
+                <p className="font-black text-slate-950">
+                  {scenarioState
+                    ? scenarioState.title
+                    : step === "email"
+                      ? "Caixa de entrada"
+                      : step === "mobile"
+                        ? "Navegador móvel"
+                        : "Portal do Estudante"}
+                </p>
+
+                <p className="text-xs text-slate-400">
+                  Ambiente SICSI III
+                </p>
+              </div>
+            </div>
+
+            <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500 sm:inline-flex">
+              Interacção activa
+            </span>
+          </div>
+
+          {scenarioState ? (
+            <ScenarioSystemState state={scenarioState} />
+          ) : step === "email" ? (
+            <div className="bg-slate-100 p-4 sm:p-8">
+              <div className="mx-auto max-w-5xl overflow-hidden rounded-[1.8rem] border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
+                      <Mail className="h-5 w-5" />
+                    </div>
+
+                    <div>
+                      <p className="font-black text-slate-950">
+                        Correio Académico
+                      </p>
+
+                      <p className="text-[11px] text-slate-400">
+                        Caixa de entrada
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="hidden rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-blue-700 sm:inline-flex">
+                      1 nova mensagem
+                    </span>
+
+                    <UserRound className="h-5 w-5 text-slate-400" />
+                  </div>
+                </div>
+
+                <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
+                  <div>
+                    <div className="border-b border-slate-200 px-5 py-5 sm:px-7">
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-sm font-black text-white">
+                          SA
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-sm font-black text-slate-950">
+                                Secretaria Académica
+                              </p>
+
+                              <p className="mt-0.5 break-all text-xs text-slate-500">
+                                {simulation.sender}
+                              </p>
+                            </div>
+
+                            <p className="text-[11px] font-semibold text-slate-400">
+                              Hoje, 09:37
+                            </p>
+                          </div>
+
+                          <h2 className="mt-5 text-xl font-black tracking-tight text-slate-950">
+                            {simulation.subject}
+                          </h2>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="px-5 py-6 sm:px-7">
+                      <p className="text-sm leading-8 text-slate-700">
+                        {simulation.message}
+                      </p>
+
+                      <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <div className="flex items-center gap-2">
+                          <QrCode className="h-4 w-4 text-blue-600" />
+
+                          <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                            Acesso móvel
+                          </span>
+                        </div>
+
+                        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-black text-slate-900">
+                              Confirmação de presença
+                            </p>
+
+                            <p className="mt-1 text-xs leading-5 text-slate-500">
+                              Abra o acesso para continuar.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={openQrAccess}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            <QrCode className="h-4 w-4" />
+                            Abrir acesso móvel
+                          </button>
+                        </div>
+                      </div>
+
+                      {emailInspection && (
+                        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                Detalhes da mensagem
+                              </p>
+
+                              <p className="mt-1 text-sm font-bold text-slate-800">
+                                Informações do remetente
+                              </p>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEmailInspection(false)
+                              }
+                              className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-50"
+                              aria-label="Fechar"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                                Remetente
+                              </p>
+
+                              <p className="mt-2 break-all text-xs font-bold text-slate-700">
+                                {simulation.sender}
+                              </p>
+                            </div>
+
+                            <div className="rounded-xl bg-slate-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                                Destino
+                              </p>
+
+                              <p className="mt-2 break-all text-xs font-bold text-slate-700">
+                                {simulation.link_target}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-5">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={inspectSender}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-blue-400 hover:text-blue-700 disabled:opacity-50"
+                        >
+                          <Mail className="h-4 w-4" />
+                          Ver detalhes
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={reportEmail}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-700 disabled:opacity-50"
+                        >
+                          <ShieldAlert className="h-4 w-4" />
+                          Denunciar mensagem
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <QrCode className="h-4 w-4 text-blue-600" />
+
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                          Código recebido
+                        </p>
+                      </div>
+
+                      <div className="mt-4">
+                        <QrCodeVisual />
+                      </div>
+
+                      <div className="mt-4 flex items-start gap-3 rounded-xl bg-slate-50 p-3">
+                        <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+
+                        <p className="text-xs leading-5 text-slate-500">
+                          Utilize o código para abrir o acesso móvel.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                          <Clock3 className="h-4 w-4" />
+                        </div>
+
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                            Validação
+                          </p>
+
+                          <p className="mt-1 text-xs font-bold text-slate-700">
+                            Período activo
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : step === "mobile" ? (
+            <div className="bg-slate-200 p-4 sm:p-8">
+              <PhoneFrame>
+                <div>
+                  <BrowserChrome
+                    url={mobile.browser_url}
+                  />
+
+                  <div className="bg-white p-5">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <PortalBrand />
+
+                      <div className="mt-5 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 p-5 text-white">
+                        <p className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-100">
+                          {mobile.banner}
+                        </p>
+
+                        <h2 className="mt-2 text-2xl font-black">
+                          {mobile.page_title}
+                        </h2>
+
+                        <p className="mt-3 text-sm leading-6 text-blue-100">
+                          {mobile.message}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                            Acesso solicitado
+                          </p>
+
+                          <p className="mt-1 truncate text-xs font-bold text-slate-700">
+                            Confirmar presença académica
+                          </p>
+                        </div>
+
+                        <span className="rounded-full bg-amber-50 px-3 py-1.5 text-[10px] font-black uppercase text-amber-700">
+                          Pendente
+                        </span>
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-slate-50 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                          Endereço
+                        </p>
+
+                        <p className="mt-1 break-all text-xs font-bold text-slate-700">
+                          {mobile.browser_url}
+                        </p>
+                      </div>
+                    </div>
+
+                    {urlInspection && (
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                              Dados da ligação
+                            </p>
+
+                            <p className="mt-2 break-all text-xs font-bold text-slate-700">
+                              {mobile.browser_url}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setUrlInspection(false)
+                            }
+                            className="rounded-lg p-2 text-slate-400 hover:bg-white"
+                            aria-label="Fechar"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="mt-4 grid gap-2">
+                          <div className="rounded-xl bg-white p-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                              Domínio
+                            </p>
+
+                            <p className="mt-1 text-xs font-bold text-slate-700">
+                              portal-aluno-verify.example
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl bg-white p-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
+                              Ligação
+                            </p>
+
+                            <p className="mt-1 text-xs font-bold text-slate-700">
+                              Disponível
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-5 grid gap-3">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={inspectMobileUrl}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-blue-400 hover:text-blue-700 disabled:opacity-50"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Verificar endereço
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={continueMobile}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        Continuar
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={leaveMobile}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:border-slate-400 disabled:opacity-50"
+                      >
+                        Sair da página
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={reportMobile}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-700 disabled:opacity-50"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <ShieldAlert className="h-4 w-4" />
+                          Denunciar
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </PhoneFrame>
+            </div>
+          ) : (
+            <div className="bg-slate-100 p-4 sm:p-8">
+              <PhoneFrame>
+                <BrowserChrome
+                  url={mobile.browser_url}
+                />
+
+                <div className="p-5">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <PortalBrand />
+
+                    <div className="mt-5 rounded-2xl bg-gradient-to-br from-blue-700 to-indigo-700 p-5 text-white">
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-blue-100">
+                        Área reservada
+                      </p>
+
+                      <h2 className="mt-2 text-xl font-black">
+                        {login.title}
+                      </h2>
+
+                      <p className="mt-2 text-sm leading-6 text-blue-100">
+                        {login.helper}
+                      </p>
+                    </div>
+
+                    {urlInspection && (
+                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                              Endereço da página
+                            </p>
+
+                            <p className="mt-2 break-all text-xs font-bold text-slate-700">
+                              {mobile.browser_url}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setUrlInspection(false)
+                            }
+                            className="rounded-lg p-2 text-slate-400 hover:bg-white"
+                            aria-label="Fechar"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <form
+                      onSubmit={submitCredentials}
+                      className="mt-5"
+                    >
+                      <label className="block">
+                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                          Endereço de correio electrónico
+                        </span>
+
+                        <div className="relative mt-2">
+                          <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                          <input
+                            type="email"
+                            value={email}
+                            onChange={(event) =>
+                              setEmail(event.target.value)
+                            }
+                            autoComplete="off"
+                            placeholder="nome@exemplo.com"
+                            className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                          />
+                        </div>
+                      </label>
+
+                      <label className="mt-4 block">
+                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                          Palavra-passe
+                        </span>
+
+                        <div className="relative mt-2">
+                          <LockKeyhole className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                          <input
+                            type="password"
+                            value={password}
+                            onChange={(event) =>
+                              setPassword(event.target.value)
+                            }
+                            autoComplete="off"
+                            placeholder="Introduza a palavra-passe"
+                            className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                          />
+                        </div>
+                      </label>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={inspectLoginUrl}
+                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-700 disabled:opacity-50"
+                      >
+                        <Globe2 className="h-4 w-4" />
+                        Verificar endereço
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={busy}
+                        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {busy ? (
+                          <>
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            A processar...
+                          </>
+                        ) : (
+                          <>
+                            {login.submit_label}
+                            <ArrowRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </button>
+
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={leaveLogin}
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:border-slate-400 disabled:opacity-50"
+                        >
+                          Sair
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={reportLogin}
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:border-blue-400 hover:text-blue-700 disabled:opacity-50"
+                        >
+                          Denunciar
+                        </button>
+                      </div>
+                    </form>
+
+                    <div className="mt-5 flex items-center justify-center gap-2 text-[10px] font-semibold text-slate-400">
+                      <LockKeyhole className="h-3.5 w-3.5" />
+                      Ligação segura
+                    </div>
+                  </div>
+                </div>
+              </PhoneFrame>
+            </div>
+          )}
+
+          {error && (
+            <div className="border-t border-red-100 bg-red-50 px-5 py-4 sm:px-7">
+              <p className="text-sm leading-6 text-red-700">
+                {error}
+              </p>
+            </div>
+          )}
+        </section>
+
+        {scenarioFinished && (
+          <FinalNavigation
+            onNext={handleNextSimulation}
+            onEnd={handleEndSimulation}
+          />
+        )}
+
+        {!scenarioFinished && (
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              onClick={handleEndSimulation}
+              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-bold text-red-700 transition hover:bg-red-50"
+            >
+              <XCircle className="h-4 w-4" />
+              Encerrar simulação
+            </button>
+          </div>
+        )}
+      </div>
+
+      {showEndModal && (
+        <EndSimulationModal
+          onCancel={() => setShowEndModal(false)}
+          onConfirm={confirmEndSimulation}
+          busy={busy}
+        />
+      )}
+    </div>
+  );
+}

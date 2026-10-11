@@ -1,0 +1,2872 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bell,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Download,
+  ExternalLink,
+  File,
+  FileCheck2,
+  FileText,
+  Folder,
+  History,
+  Info,
+  Link2,
+  Lock,
+  Mail,
+  MessageSquare,
+  PanelRight,
+  Search,
+  Send,
+  Settings2,
+  ShieldAlert,
+  ShieldCheck,
+  Share2,
+  Sparkles,
+  Upload,
+  User,
+  Users,
+  X,
+} from "lucide-react";
+
+import { useAuth } from "../../../../context/AuthContext";
+
+import {
+  registerAction,
+  startSimulation,
+} from "../engine/simulationEngine";
+
+import {
+  completeSimulationSession,
+} from "../engine/simulationSession";
+
+const SIMULATION = {
+  area: "phishing",
+  id: "phishing-04",
+  number: 4,
+  title: "Documento partilhado",
+};
+
+const STATES = {
+  HOME: "document_home",
+  SEARCH: "document_search",
+  DOCUMENT_VIEWER: "document_viewer",
+  VERSION_HISTORY: "version_history",
+  ACCESS_DETAILS: "access_details",
+  SHARE_PANEL: "share_panel",
+  SHARE_EXTERNAL: "share_external",
+  SHARE_RESULT: "share_result",
+  ATTACHMENT_RESULT: "attachment_result",
+  COMMENT_PANEL: "comment_panel",
+  DOWNLOAD_PANEL: "download_panel",
+  ACCESS_REQUEST: "access_request",
+  IDENTITY_CHECK: "identity_check",
+  AUTHENTICATION: "authentication",
+  AUTH_PROCESSING: "authentication_processing",
+  AUTH_RESULT: "authentication_result",
+  DOWNLOAD_PROCESSING: "download_processing",
+  DOWNLOAD_RESULT: "download_result",
+  DOWNLOAD_READY: "download_ready",
+  SAFE_EXIT: "safe_exit",
+  COMPLETED: "completed",
+};
+
+function getCurrentAccount(user) {
+  return (
+    user?.email ||
+    user?.username ||
+    user?.login ||
+    "Conta académica"
+  );
+}
+
+function createInitialSession() {
+  return startSimulation({
+    area: SIMULATION.area,
+    simulationId: SIMULATION.id,
+    simulationNumber: SIMULATION.number,
+    initialState: STATES.HOME,
+  });
+}
+
+function registerNavigation(action, nextState, metadata = {}) {
+  return registerAction({
+    action,
+    nextState,
+    interactionType: "navigation",
+    metadata,
+  });
+}
+
+function GlassButton({
+  children,
+  onClick,
+  icon: Icon,
+  variant = "primary",
+  disabled = false,
+  className = "",
+  type = "button",
+}) {
+  const variants = {
+    primary:
+      "bg-blue-700 text-white hover:bg-blue-800 shadow-sm",
+    secondary:
+      "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50",
+    subtle:
+      "bg-slate-100 text-slate-700 hover:bg-slate-200",
+    dark:
+      "bg-slate-900 text-white hover:bg-slate-800",
+  };
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={[
+        "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5",
+        "text-sm font-semibold transition-all duration-200",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        variants[variant],
+        className,
+      ].join(" ")}
+    >
+      {Icon ? <Icon size={17} /> : null}
+      {children}
+    </button>
+  );
+}
+
+function AppShell({
+  account,
+  children,
+  onBack,
+  onHome,
+  onSearch,
+  searchOpen,
+}) {
+  return (
+    <div className="min-h-screen bg-[#f5f8fc] text-slate-800">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl">
+        <div className="flex h-16 items-center justify-between px-4 md:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+              aria-label="Voltar"
+            >
+              <ArrowLeft size={19} />
+            </button>
+
+            <button
+              type="button"
+              onClick={onHome}
+              className="flex items-center gap-2"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-700 text-white shadow-sm">
+                <FileCheck2 size={19} />
+              </div>
+
+              <div className="hidden text-left sm:block">
+                <div className="text-sm font-bold tracking-tight text-slate-900">
+                  SICSI Drive
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  Documentos académicos
+                </div>
+              </div>
+            </button>
+          </div>
+
+          <div className="hidden max-w-xl flex-1 px-8 md:block">
+            <div className="relative">
+              <Search
+                size={17}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <button
+                type="button"
+                onClick={onSearch}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-left text-sm text-slate-500 transition hover:border-blue-300 hover:bg-white"
+              >
+                {searchOpen
+                  ? "Pesquisa activa"
+                  : "Pesquisar documentos..."}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                registerAction({
+                  action: "open_notifications",
+                  nextState: STATES.HOME,
+                  interactionType: "navigation",
+                })
+              }
+              className="rounded-xl p-2 text-slate-500 hover:bg-slate-100"
+              aria-label="Notificações"
+            >
+              <Bell size={18} />
+            </button>
+
+            <div className="hidden h-9 w-px bg-slate-200 sm:block" />
+
+            <div className="flex max-w-[220px] items-center gap-2 rounded-xl px-2 py-1.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                <User size={16} />
+              </div>
+
+              <div className="hidden min-w-0 sm:block">
+                <div className="truncate text-xs font-semibold text-slate-800">
+                  {account}
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  Conta académica
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {children}
+    </div>
+  );
+}
+
+function Sidebar({
+  currentFolder,
+  onFolder,
+  onShared,
+  onRecent,
+}) {
+  return (
+    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
+      <div className="p-4">
+        <button
+          type="button"
+          onClick={() =>
+            registerAction({
+              action: "create_new_document",
+              nextState: STATES.HOME,
+              interactionType: "interaction",
+              metadata: {
+                available: false,
+              },
+            })
+          }
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-800"
+        >
+          <Upload size={17} />
+          Novo documento
+        </button>
+      </div>
+
+      <nav className="space-y-1 px-3">
+        <button
+          type="button"
+          onClick={onFolder}
+          className={[
+            "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium",
+            currentFolder === "meus"
+              ? "bg-blue-50 text-blue-700"
+              : "text-slate-600 hover:bg-slate-50",
+          ].join(" ")}
+        >
+          <Folder size={18} />
+          Meus documentos
+        </button>
+
+        <button
+          type="button"
+          onClick={onShared}
+          className={[
+            "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium",
+            currentFolder === "partilhados"
+              ? "bg-blue-50 text-blue-700"
+              : "text-slate-600 hover:bg-slate-50",
+          ].join(" ")}
+        >
+          <Users size={18} />
+          Partilhados comigo
+        </button>
+
+        <button
+          type="button"
+          onClick={onRecent}
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          <Clock3 size={18} />
+          Recentes
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            registerAction({
+              action: "open_starred_documents",
+              nextState: STATES.HOME,
+              interactionType: "navigation",
+            })
+          }
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          <Sparkles size={18} />
+          Favoritos
+        </button>
+      </nav>
+
+      <div className="mx-4 my-5 border-t border-slate-100" />
+
+      <div className="px-4">
+        <div className="mb-2 px-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          Armazenamento
+        </div>
+
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="mb-2 flex items-center justify-between text-xs">
+            <span className="text-slate-500">Utilizado</span>
+            <span className="font-semibold text-slate-700">
+              4,2 GB / 15 GB
+            </span>
+          </div>
+
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full w-[28%] rounded-full bg-blue-600" />
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function DocumentCard({ onOpen }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+    >
+      <div className="relative h-36 overflow-hidden bg-gradient-to-br from-blue-800 via-blue-700 to-blue-500 p-5 text-white">
+        <div className="absolute right-4 top-4 rounded-lg bg-white/15 p-2 backdrop-blur-md">
+          <FileText size={20} />
+        </div>
+
+        <div className="absolute bottom-5 left-5">
+          <div className="mb-1 text-xs font-medium text-white/70">
+            Documento partilhado
+          </div>
+
+          <div className="text-lg font-bold">
+            Relatório de Segurança Digital
+          </div>
+
+          <div className="mt-1 text-xs text-white/75">
+            Versão 4.2 · actualizado hoje
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold text-slate-800">
+              Relatório de Segurança Digital
+            </div>
+
+            <div className="mt-1 text-xs text-slate-500">
+              Centro de Estudos e Sistemas
+            </div>
+          </div>
+
+          <ExternalLink
+            size={16}
+            className="shrink-0 text-slate-400 transition group-hover:text-blue-600"
+          />
+        </div>
+
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex -space-x-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-blue-100 text-[10px] font-bold text-blue-700">
+              CE
+            </div>
+
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-slate-100 text-[10px] font-bold text-slate-600">
+              AN
+            </div>
+
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-indigo-100 text-[10px] font-bold text-indigo-700">
+              +2
+            </div>
+          </div>
+
+          <span className="text-xs text-slate-400">
+            Partilhado consigo
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function DocumentHome({
+  onOpenDocument,
+  onShared,
+  onSearch,
+  searchOpen,
+}) {
+  return (
+    <div className="flex min-h-[calc(100vh-4rem)]">
+      <Sidebar
+        currentFolder="partilhados"
+        onFolder={() =>
+          registerNavigation(
+            "open_my_documents",
+            STATES.HOME
+          )
+        }
+        onShared={onShared}
+        onRecent={() =>
+          registerNavigation(
+            "open_recent_documents",
+            STATES.HOME
+          )
+        }
+      />
+
+      <main className="min-w-0 flex-1">
+        <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 md:py-8">
+          <div className="mb-8">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-blue-700">
+                  <Users size={14} />
+                  PARTILHADOS COMIGO
+                </div>
+
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+                  Documentos partilhados
+                </h1>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                  Consulte, colabore e acompanhe documentos aos quais tem
+                  acesso através da sua conta académica.
+                </p>
+              </div>
+
+              <GlassButton
+                icon={Search}
+                variant="secondary"
+                onClick={onSearch}
+              >
+                {searchOpen ? "Pesquisa activa" : "Pesquisar"}
+              </GlassButton>
+            </div>
+          </div>
+
+          {searchOpen ? (
+            <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <div className="flex items-center gap-3">
+                <Search size={18} className="text-blue-700" />
+
+                <input
+                  autoFocus
+                  className="w-full bg-transparent text-sm outline-none placeholder:text-blue-400"
+                  placeholder="Pesquisar por nome, proprietário ou pasta..."
+                  onChange={(event) =>
+                    registerAction({
+                      action: "search_documents",
+                      nextState: STATES.SEARCH,
+                      interactionType: "input",
+                      metadata: {
+                        has_query:
+                          event.target.value.trim().length > 0,
+                        query_length:
+                          event.target.value.trim().length,
+                        content_stored: false,
+                      },
+                    })
+                  }
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <section>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900">
+                  Partilhados recentemente
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  1 documento requer a sua atenção.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={onShared}
+                className="text-xs font-semibold text-blue-700 hover:text-blue-800"
+              >
+                Ver todos
+              </button>
+            </div>
+
+            <div className="max-w-md">
+              <DocumentCard onOpen={onOpenDocument} />
+            </div>
+          </section>
+
+          <section className="mt-8 grid gap-4 md:grid-cols-3">
+            <InfoTile
+              icon={Lock}
+              title="Acesso protegido"
+              text="Os documentos utilizam permissões por conta."
+            />
+
+            <InfoTile
+              icon={History}
+              title="Histórico"
+              text="As alterações ficam associadas às versões."
+            />
+
+            <InfoTile
+              icon={Users}
+              title="Colaboração"
+              text="Partilhe documentos com pessoas autorizadas."
+            />
+          </section>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function InfoTile({ icon: Icon, title, text }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+        <Icon size={18} />
+      </div>
+
+      <div className="text-sm font-bold text-slate-800">
+        {title}
+      </div>
+
+      <div className="mt-1 text-xs leading-5 text-slate-500">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function DocumentToolbar({
+  onBack,
+  onHistory,
+  onAccess,
+  onShare,
+  onComment,
+  onDownload,
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 md:px-6">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+          aria-label="Voltar aos documentos"
+        >
+          <ArrowLeft size={18} />
+        </button>
+
+        <div className="mx-2 hidden h-6 w-px bg-slate-200 sm:block" />
+
+        <div className="hidden items-center gap-2 sm:flex">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+            <FileText size={16} />
+          </div>
+
+          <div>
+            <div className="max-w-[260px] truncate text-xs font-bold text-slate-800">
+              Relatório de Segurança Digital
+            </div>
+
+            <div className="text-[10px] text-slate-400">
+              Guardado automaticamente
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1">
+        <ToolbarButton
+          icon={History}
+          label="Histórico"
+          onClick={onHistory}
+        />
+
+        <ToolbarButton
+          icon={Info}
+          label="Acesso"
+          onClick={onAccess}
+        />
+
+        <ToolbarButton
+          icon={MessageSquare}
+          label="Comentários"
+          onClick={onComment}
+        />
+
+        <ToolbarButton
+          icon={Share2}
+          label="Partilhar"
+          onClick={onShare}
+        />
+
+        <ToolbarButton
+          icon={Download}
+          label="Transferir"
+          onClick={onDownload}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ToolbarButton({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-blue-700"
+    >
+      <Icon size={16} />
+      <span className="hidden xl:inline">{label}</span>
+    </button>
+  );
+}
+
+function DocumentViewer({
+  onBack,
+  onHistory,
+  onAccess,
+  onShare,
+  onComment,
+  onDownload,
+  onAttachment,
+}) {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-100">
+      <DocumentToolbar
+        onBack={onBack}
+        onHistory={onHistory}
+        onAccess={onAccess}
+        onShare={onShare}
+        onComment={onComment}
+        onDownload={onDownload}
+      />
+
+      <div className="mx-auto flex max-w-6xl justify-center px-3 py-6 md:px-8 md:py-10">
+        <article className="w-full max-w-4xl overflow-hidden rounded-sm bg-white shadow-xl">
+          <div className="border-b border-slate-100 px-8 py-8 md:px-14 md:py-12">
+            <div className="mb-8 flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-700">
+                  Centro de Estudos e Sistemas
+                </div>
+
+                <div className="mt-2 text-xs text-slate-400">
+                  Documento institucional · versão 4.2
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                Partilhado
+              </div>
+            </div>
+
+            <h1 className="max-w-3xl text-3xl font-bold leading-tight text-slate-900 md:text-4xl">
+              Relatório de Segurança Digital
+            </h1>
+
+            <p className="mt-3 text-sm text-slate-500">
+              Avaliação dos controlos de segurança dos sistemas académicos
+              — período 2026.
+            </p>
+
+            <div className="mt-8 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:grid-cols-3">
+              <DocumentMeta
+                label="Proprietário"
+                value="Centro de Estudos e Sistemas"
+              />
+
+              <DocumentMeta
+                label="Última alteração"
+                value="Hoje, 09:42"
+              />
+
+              <DocumentMeta
+                label="Partilha"
+                value="4 colaboradores"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-8 px-8 py-8 text-sm leading-7 text-slate-600 md:px-14 md:py-12">
+            <section>
+              <h2 className="mb-3 text-xl font-bold text-slate-900">
+                1. Enquadramento
+              </h2>
+
+              <p>
+                O presente documento reúne a avaliação dos principais
+                mecanismos de protecção utilizados nos serviços digitais
+                académicos, incluindo autenticação, gestão documental,
+                partilha de informação e controlo de acesso.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-xl font-bold text-slate-900">
+                2. Controlo de acesso
+              </h2>
+
+              <p>
+                Os recursos institucionais são disponibilizados através de
+                permissões associadas à identidade digital do utilizador.
+                Alterações de permissões devem ser registadas e associadas
+                ao recurso correspondente.
+              </p>
+
+              <div className="my-6 rounded-xl border-l-4 border-blue-600 bg-blue-50 p-5">
+                <div className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                  Nota técnica
+                </div>
+
+                <div className="mt-2 text-sm leading-6 text-blue-900">
+                  A partilha externa de documentos institucionais deve ser
+                  autorizada pelo proprietário ou por um administrador do
+                  espaço documental.
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="mb-3 text-xl font-bold text-slate-900">
+                3. Registo e auditoria
+              </h2>
+
+              <p>
+                Cada alteração relevante deve manter informação sobre o
+                utilizador responsável, o recurso afectado e a data da
+                operação. O histórico de versões permite reconstruir o
+                estado anterior do documento.
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                  <FileText size={19} />
+                </div>
+
+                <div>
+                  <div className="font-bold text-slate-800">
+                    Anexo associado
+                  </div>
+
+                  <div className="mt-1 text-xs text-slate-500">
+                    Matriz_Controlo_Acesso_2026.xlsx · 842 KB
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onAttachment}
+                    className="mt-3 text-xs font-semibold text-blue-700 hover:underline"
+                  >
+                    Consultar anexo
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function AttachmentResultView({
+  onBack,
+  onNext,
+}) {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-100 px-4 py-8 md:px-8 md:py-12">
+      <div className="mx-auto max-w-3xl">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="bg-gradient-to-br from-blue-800 via-blue-700 to-blue-600 px-6 py-8 text-white md:px-8">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-xl">
+                <FileText size={23} />
+              </div>
+
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
+                  Anexo associado
+                </div>
+
+                <h1 className="mt-2 text-2xl font-bold">
+                  Consulta do anexo registada
+                </h1>
+
+                <p className="mt-2 text-sm leading-6 text-blue-100">
+                  A consulta do ficheiro associado foi processada pelo serviço documental.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 md:p-8">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                Ficheiro consultado
+              </div>
+
+              <div className="mt-2 text-sm font-bold text-slate-800">
+                Matriz_Controlo_Acesso_2026.xlsx
+              </div>
+
+              <div className="mt-1 text-xs text-slate-500">
+                XLSX · 842 KB
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+              <div className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                Consequência
+              </div>
+
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                A acção foi registada na sessão e passou a fazer parte do percurso
+                de interacção desta simulação.
+              </p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl bg-white p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                    Acção
+                  </div>
+
+                  <div className="mt-1 text-sm font-semibold text-slate-800">
+                    Consulta do anexo
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-white p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                    Conteúdo
+                  </div>
+
+                  <div className="mt-1 text-sm font-semibold text-slate-800">
+                    Não armazenado
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={onBack}
+                className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Voltar ao documento
+              </button>
+
+              <button
+                type="button"
+                onClick={onNext}
+                className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-800"
+              >
+                Próxima simulação
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function DocumentMeta({ label, value }) {
+  return (
+    <div>
+      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+        {label}
+      </div>
+
+      <div className="mt-1 text-xs font-semibold text-slate-700">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SidePanel({
+  title,
+  subtitle,
+  onClose,
+  children,
+}) {
+  return (
+    <div className="fixed inset-0 z-50">
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]"
+        aria-label="Fechar painel"
+      />
+
+      <aside className="absolute right-0 top-0 h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl">
+        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur-xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                {title}
+              </h2>
+
+              {subtitle ? (
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  {subtitle}
+                </p>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Fechar"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-5">{children}</div>
+      </aside>
+    </div>
+  );
+}
+
+function HistoryPanel({ onClose, onVersion }) {
+  const versions = [
+    {
+      version: "4.2",
+      date: "Hoje, 09:42",
+      author: "Centro de Estudos e Sistemas",
+      current: true,
+    },
+    {
+      version: "4.1",
+      date: "13 Set, 18:16",
+      author: "Ana Nunes",
+      current: false,
+    },
+    {
+      version: "4.0",
+      date: "12 Set, 11:03",
+      author: "Centro de Estudos e Sistemas",
+      current: false,
+    },
+    {
+      version: "3.9",
+      date: "10 Set, 15:48",
+      author: "Mário Correia",
+      current: false,
+    },
+  ];
+
+  return (
+    <SidePanel
+      title="Histórico de versões"
+      subtitle="Consulte as alterações registadas neste documento."
+      onClose={onClose}
+    >
+      <div className="space-y-3">
+        {versions.map((item) => (
+          <button
+            key={item.version}
+            type="button"
+            onClick={() => onVersion(item.version)}
+            className="w-full rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50/40"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+                  <History size={17} />
+                </div>
+
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    Versão {item.version}
+                  </div>
+
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {item.author}
+                  </div>
+                </div>
+              </div>
+
+              {item.current ? (
+                <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                  Actual
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-3 text-[11px] text-slate-400">
+              {item.date}
+            </div>
+          </button>
+        ))}
+      </div>
+    </SidePanel>
+  );
+}
+
+function AccessPanel({
+  onClose,
+  onRequestAccess,
+  onShare,
+}) {
+  return (
+    <SidePanel
+      title="Permissões de acesso"
+      subtitle="Defina como este documento está disponível."
+      onClose={onClose}
+    >
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-emerald-700">
+            <ShieldCheck size={18} />
+          </div>
+
+          <div>
+            <div className="text-sm font-bold text-emerald-900">
+              Acesso por conta
+            </div>
+
+            <div className="mt-1 text-xs leading-5 text-emerald-800">
+              O documento está disponível para utilizadores autorizados.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-2">
+        <AccessPerson
+          initials="CE"
+          name="Centro de Estudos e Sistemas"
+          role="Proprietário"
+        />
+
+        <AccessPerson
+          initials="AN"
+          name="Ana Nunes"
+          role="Editor"
+        />
+
+        <AccessPerson
+          initials="MC"
+          name="Mário Correia"
+          role="Comentador"
+        />
+
+        <AccessPerson
+          initials="EU"
+          name="A sua conta"
+          role="Visualizador"
+        />
+      </div>
+
+      <div className="mt-6 grid gap-2">
+        <GlassButton
+          icon={Share2}
+          className="w-full"
+          onClick={onShare}
+        >
+          Gerir partilha
+        </GlassButton>
+
+        <GlassButton
+          icon={Send}
+          variant="secondary"
+          className="w-full"
+          onClick={onRequestAccess}
+        >
+          Pedir alteração de acesso
+        </GlassButton>
+      </div>
+    </SidePanel>
+  );
+}
+
+function AccessPerson({
+  initials,
+  name,
+  role,
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-slate-100 p-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+          {initials}
+        </div>
+
+        <div className="min-w-0">
+          <div className="truncate text-xs font-bold text-slate-700">
+            {name}
+          </div>
+
+          <div className="text-[10px] text-slate-400">
+            {role}
+          </div>
+        </div>
+      </div>
+
+      <ChevronRight size={15} className="text-slate-300" />
+    </div>
+  );
+}
+
+function SharePanel({
+  onClose,
+  onExternal,
+  onCopyLink,
+}) {
+  const [permission, setPermission] = useState("viewer");
+
+  return (
+    <SidePanel
+      title="Partilhar documento"
+      subtitle="Adicione pessoas ou configure um link de acesso."
+      onClose={onClose}
+    >
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+            <Share2 size={18} />
+          </div>
+
+          <div>
+            <div className="text-sm font-bold text-slate-800">
+              Relatório de Segurança Digital
+            </div>
+
+            <div className="text-xs text-slate-500">
+              Partilha controlada
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <label className="mb-2 block text-xs font-bold text-slate-700">
+          Pessoa ou endereço de email
+        </label>
+
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+          <Mail size={16} className="text-slate-400" />
+
+          <input
+            className="min-w-0 flex-1 text-sm outline-none"
+            placeholder="nome@exemplo.org"
+            onChange={(event) =>
+              registerAction({
+                action: "enter_share_recipient",
+                nextState: STATES.SHARE_PANEL,
+                interactionType: "input",
+                metadata: {
+                  has_value:
+                    event.target.value.trim().length > 0,
+                  value_length:
+                    event.target.value.trim().length,
+                  content_stored: false,
+                },
+              })
+            }
+          />
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <label className="mb-2 block text-xs font-bold text-slate-700">
+          Permissão
+        </label>
+
+        <div className="relative">
+          <select
+            value={permission}
+            onChange={(event) => {
+              setPermission(event.target.value);
+
+              registerAction({
+                action: "change_share_permission",
+                nextState: STATES.SHARE_PANEL,
+                interactionType: "selection",
+                metadata: {
+                  permission: event.target.value,
+                },
+              });
+            }}
+            className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 py-3 pr-9 text-sm outline-none focus:border-blue-400"
+          >
+            <option value="viewer">Pode visualizar</option>
+            <option value="commenter">Pode comentar</option>
+            <option value="editor">Pode editar</option>
+          </select>
+
+          <ChevronDown
+            size={16}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-2">
+        <GlassButton
+          icon={Send}
+          className="w-full"
+          onClick={() =>
+            registerAction({
+              action: "send_document_invitation",
+              nextState: STATES.SHARE_PANEL,
+              interactionType: "action",
+              metadata: {
+                permission,
+              },
+            })
+          }
+        >
+          Enviar convite
+        </GlassButton>
+
+        <GlassButton
+          icon={Link2}
+          variant="secondary"
+          className="w-full"
+          onClick={onCopyLink}
+        >
+          Copiar ligação
+        </GlassButton>
+
+        <GlassButton
+          icon={ExternalLink}
+          variant="secondary"
+          className="w-full"
+          onClick={onExternal}
+        >
+          Configurar acesso externo
+        </GlassButton>
+      </div>
+    </SidePanel>
+  );
+}
+
+function ExternalSharePanel({
+  onClose,
+  onContinue,
+}) {
+  const [scope, setScope] = useState("specific");
+
+  return (
+    <SidePanel
+      title="Acesso externo"
+      subtitle="Configure o alcance da ligação partilhada."
+      onClose={onClose}
+    >
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <div className="flex gap-3">
+          <Info size={18} className="mt-0.5 shrink-0 text-amber-700" />
+
+          <div className="text-xs leading-5 text-amber-900">
+            Alterar o alcance da partilha pode tornar o documento acessível
+            fora do espaço académico.
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-2">
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4">
+          <input
+            type="radio"
+            checked={scope === "specific"}
+            onChange={() => {
+              setScope("specific");
+
+              registerAction({
+                action: "select_external_scope_specific",
+                nextState: STATES.SHARE_EXTERNAL,
+                interactionType: "selection",
+              });
+            }}
+          />
+
+          <span>
+            <span className="block text-xs font-bold text-slate-800">
+              Pessoas específicas
+            </span>
+
+            <span className="mt-1 block text-[11px] leading-5 text-slate-500">
+              Apenas contas adicionadas pelo proprietário.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4">
+          <input
+            type="radio"
+            checked={scope === "link"}
+            onChange={() => {
+              setScope("link");
+
+              registerAction({
+                action: "select_external_scope_link",
+                nextState: STATES.SHARE_EXTERNAL,
+                interactionType: "selection",
+              });
+            }}
+          />
+
+          <span>
+            <span className="block text-xs font-bold text-slate-800">
+              Qualquer pessoa com a ligação
+            </span>
+
+            <span className="mt-1 block text-[11px] leading-5 text-slate-500">
+              A ligação poderá ser utilizada fora do espaço académico.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-6">
+        <GlassButton
+          icon={Settings2}
+          className="w-full"
+          onClick={() => onContinue(scope)}
+        >
+          Aplicar configuração
+        </GlassButton>
+      </div>
+    </SidePanel>
+  );
+}
+
+function ShareConfigurationResultView({
+  scope,
+  onBack,
+  onNext,
+}) {
+  const isLink = scope === "link";
+
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+      <div className="mx-auto max-w-xl px-4 py-12 md:py-20">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="bg-gradient-to-br from-blue-800 via-blue-700 to-blue-500 p-8 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md">
+              <Share2 size={23} />
+            </div>
+
+            <div className="mt-6 text-xs font-semibold uppercase tracking-[0.16em] text-white/65">
+              Configuração de partilha
+            </div>
+
+            <h1 className="mt-2 text-2xl font-bold">
+              A configuração foi aplicada
+            </h1>
+
+            <p className="mt-2 text-sm leading-6 text-white/75">
+              O serviço documental registou a alteração e actualizou o
+              alcance da ligação partilhada.
+            </p>
+          </div>
+
+          <div className="p-7 md:p-8">
+            <div
+              className={[
+                "rounded-2xl border p-5",
+                isLink
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-emerald-200 bg-emerald-50",
+              ].join(" ")}
+            >
+              <div className="flex items-start gap-3">
+                <Info
+                  size={18}
+                  className={
+                    isLink
+                      ? "mt-0.5 text-amber-700"
+                      : "mt-0.5 text-emerald-700"
+                  }
+                />
+
+                <div>
+                  <div
+                    className={
+                      isLink
+                        ? "text-sm font-bold text-amber-900"
+                        : "text-sm font-bold text-emerald-900"
+                    }
+                  >
+                    {isLink
+                      ? "Qualquer pessoa com a ligação"
+                      : "Pessoas específicas"}
+                  </div>
+
+                  <p
+                    className={
+                      isLink
+                        ? "mt-2 text-xs leading-5 text-amber-800"
+                        : "mt-2 text-xs leading-5 text-emerald-800"
+                    }
+                  >
+                    {isLink
+                      ? "O documento passa a poder ser acedido através da ligação fora do espaço académico."
+                      : "O documento continua limitado às contas adicionadas pelo proprietário."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3 text-xs">
+              <StatusLine
+                label="Documento"
+                value="Relatório de Segurança Digital"
+              />
+
+              <StatusLine
+                label="Alcance"
+                value={
+                  isLink
+                    ? "Ligação externa"
+                    : "Contas específicas"
+                }
+              />
+
+              <StatusLine
+                label="Registo"
+                value="Guardado"
+              />
+            </div>
+
+            <div className="mt-7 flex flex-col gap-2 sm:flex-row">
+              <GlassButton
+                variant="secondary"
+                className="flex-1"
+                onClick={onBack}
+              >
+                Voltar ao documento
+              </GlassButton>
+
+              <GlassButton
+                icon={ArrowRight}
+                className="flex-1"
+                onClick={onNext}
+              >
+                Próxima simulação
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function CommentPanel({ onClose }) {
+  const [comment, setComment] = useState("");
+
+  return (
+    <SidePanel
+      title="Comentários"
+      subtitle="Comentários associados ao documento."
+      onClose={onClose}
+    >
+      <div className="space-y-3">
+        <Comment
+          initials="AN"
+          name="Ana Nunes"
+          time="09:17"
+          text="A secção de controlo de acesso foi actualizada."
+        />
+
+        <Comment
+          initials="MC"
+          name="Mário Correia"
+          time="09:28"
+          text="Podemos confirmar os dados da matriz antes da publicação?"
+        />
+      </div>
+
+      <div className="mt-6 border-t border-slate-100 pt-5">
+        <label className="mb-2 block text-xs font-bold text-slate-700">
+          Novo comentário
+        </label>
+
+        <textarea
+          value={comment}
+          onChange={(event) => {
+            setComment(event.target.value);
+
+            registerAction({
+              action: "write_document_comment",
+              nextState: STATES.COMMENT_PANEL,
+              interactionType: "input",
+              metadata: {
+                has_content:
+                  event.target.value.trim().length > 0,
+                content_length: event.target.value.length,
+                content_stored: false,
+              },
+            });
+          }}
+          rows={4}
+          className="w-full resize-none rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-400"
+          placeholder="Escreva um comentário..."
+        />
+
+        <div className="mt-2 flex justify-end">
+          <GlassButton
+            icon={Send}
+            onClick={() => {
+              registerAction({
+                action: "submit_document_comment",
+                nextState: STATES.COMMENT_PANEL,
+                interactionType: "action",
+                metadata: {
+                  content_length: comment.length,
+                  content_stored: false,
+                },
+              });
+
+              setComment("");
+            }}
+          >
+            Publicar
+          </GlassButton>
+        </div>
+      </div>
+    </SidePanel>
+  );
+}
+
+function Comment({
+  initials,
+  name,
+  time,
+  text,
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
+          {initials}
+        </div>
+
+        <div>
+          <div className="text-xs font-bold text-slate-800">
+            {name}
+          </div>
+
+          <div className="text-[10px] text-slate-400">
+            Hoje, {time}
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-slate-600">
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function DownloadPanel({
+  onClose,
+  onContinue,
+}) {
+  return (
+    <SidePanel
+      title="Transferir documento"
+      subtitle="Escolha o formato para guardar uma cópia local."
+      onClose={onClose}
+    >
+      <div className="rounded-2xl border border-slate-200 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <Download size={18} />
+          </div>
+
+          <div>
+            <div className="text-sm font-bold text-slate-800">
+              Relatório de Segurança Digital
+            </div>
+
+            <div className="mt-1 text-xs text-slate-500">
+              Documento · 1,8 MB
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-2">
+        <DownloadOption
+          title="PDF"
+          subtitle="Cópia não editável"
+          onClick={() => onContinue("PDF")}
+        />
+
+        <DownloadOption
+          title="DOCX"
+          subtitle="Documento editável"
+          onClick={() => onContinue("DOCX")}
+        />
+
+        <DownloadOption
+          title="Cópia original"
+          subtitle="Formato institucional"
+          onClick={() => onContinue("Cópia original")}
+        />
+      </div>
+    </SidePanel>
+  );
+}
+
+function DownloadOption({
+  title,
+  subtitle,
+  onClick,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        registerAction({
+          action: "select_download_format",
+          nextState: STATES.DOWNLOAD_PANEL,
+          interactionType: "selection",
+          metadata: {
+            format: title,
+          },
+        });
+
+        onClick();
+      }}
+      className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50/30"
+    >
+      <div className="flex items-center gap-3">
+        <File size={18} className="text-slate-400" />
+
+        <div>
+          <div className="text-xs font-bold text-slate-800">
+            {title}
+          </div>
+
+          <div className="mt-0.5 text-[10px] text-slate-400">
+            {subtitle}
+          </div>
+        </div>
+      </div>
+
+      <ChevronRight size={16} className="text-slate-300" />
+    </button>
+  );
+}
+
+function DownloadResultView({ format, onBack, onNext }) {
+  return (
+    <div className="mx-auto max-w-4xl">
+      <section className="overflow-hidden rounded-[32px] border border-red-200 bg-white shadow-xl shadow-red-100/40">
+
+        <div className="bg-gradient-to-br from-red-700 via-red-600 to-red-500 px-7 py-9 text-white sm:px-10 sm:py-12">
+          <div className="flex items-start gap-4">
+
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+              <ShieldAlert className="h-7 w-7" />
+            </div>
+
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-100">
+                Simulação 04 · Feedback de segurança
+              </p>
+
+              <h1 className="mt-2 text-3xl font-black tracking-[-0.03em] sm:text-4xl">
+                O documento foi transferido
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-red-50">
+                O pedido de transferência foi processado porque a decisão
+                permitiu que o fluxo avançasse sem uma validação adequada.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        <div className="space-y-5 p-7 sm:p-10">
+
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-5 sm:p-6">
+            <div className="flex items-start gap-3">
+
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-red-700">
+                  Consequência da decisão
+                </p>
+
+                <p className="mt-2 text-sm leading-7 text-red-800">
+                  A transferência foi processada no cenário. Uma solicitação
+                  não verificada pode permitir que informação institucional
+                  seja entregue através de um processo que não foi devidamente
+                  confirmado.
+                </p>
+              </div>
+
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                Formato
+              </p>
+
+              <p className="mt-2 text-lg font-black text-slate-900">
+                {format || "PDF"}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                Documento
+              </p>
+
+              <p className="mt-2 text-sm font-black text-slate-900">
+                Relatório de Segurança Digital
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
+                Estado
+              </p>
+
+              <p className="mt-2 text-sm font-black text-red-900">
+                TRANSFERÊNCIA PROCESSADA
+              </p>
+            </div>
+
+          </div>
+
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
+              Lição de segurança
+            </p>
+
+            <p className="mt-2 text-sm font-black leading-6 text-blue-950">
+              Antes de transferir um documento solicitado inesperadamente,
+              confirme a origem, o destinatário, o pedido e o canal utilizado.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onNext}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+          >
+            Próxima simulação
+            <ArrowRight className="h-4 w-4" />
+          </button>
+
+        </div>
+      </section>
+    </div>
+  );
+}
+function AuthenticationResultView({
+  onBack,
+  onReturn,
+}) {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+      <div className="mx-auto max-w-xl px-4 py-12 md:py-20">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="bg-gradient-to-br from-blue-800 via-blue-700 to-blue-500 p-8 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md">
+              <ShieldCheck size={23} />
+            </div>
+
+            <div className="mt-6 text-xs font-semibold uppercase tracking-[0.16em] text-white/65">
+              Serviço de identidade
+            </div>
+
+            <h1 className="mt-2 text-2xl font-bold">
+              Sessão de autenticação
+            </h1>
+          </div>
+
+          <div className="p-7 md:p-8">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex items-start gap-3">
+                <Info size={18} className="mt-0.5 text-slate-500" />
+
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    A operação não foi concluída
+                  </div>
+
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    O serviço de identidade não conseguiu concluir a
+                    comunicação com o espaço documental.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3 text-xs">
+              <StatusLine
+                label="Conta"
+                value="Reconhecida"
+              />
+
+              <StatusLine
+                label="Documento"
+                value="Identificado"
+              />
+
+              <StatusLine
+                label="Sessão"
+                value="Interrompida"
+              />
+            </div>
+
+            <div className="mt-7 flex flex-col gap-2 sm:flex-row">
+              <GlassButton
+                variant="secondary"
+                className="flex-1"
+                onClick={onBack}
+              >
+                Voltar
+              </GlassButton>
+
+              <GlassButton
+                className="flex-1"
+                onClick={onReturn}
+              >
+                Voltar ao documento
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusLine({ label, value }) {
+  return (
+    <div className="flex items-center justify-between border-b border-slate-100 py-2.5">
+      <span className="text-slate-400">{label}</span>
+      <span className="font-semibold text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+function DownloadProcessingView({
+  onContinue,
+}) {
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      onContinue();
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [onContinue]);
+
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-xl items-center justify-center px-4">
+        <div className="w-full rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-700 text-white">
+            <Download size={24} />
+          </div>
+
+          <h1 className="mt-6 text-xl font-bold text-slate-900">
+            A preparar transferência
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-500">
+            O serviço está a preparar a cópia do documento.
+          </p>
+
+          <div className="mt-7 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full w-3/4 animate-pulse rounded-full bg-blue-600" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DownloadReadyView({
+  onBack,
+  onOpenFile,
+}) {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+      <div className="mx-auto max-w-xl px-4 py-12 md:py-20">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="bg-gradient-to-br from-blue-800 via-blue-700 to-blue-500 p-8 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md">
+              <Download size={23} />
+            </div>
+
+            <h1 className="mt-6 text-2xl font-bold">
+              Documento preparado
+            </h1>
+
+            <p className="mt-2 text-sm text-white/75">
+              A cópia está pronta para a operação seguinte.
+            </p>
+          </div>
+
+          <div className="p-7 md:p-8">
+            <div className="flex items-center gap-4 rounded-2xl border border-slate-200 p-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                <FileText size={20} />
+              </div>
+
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold text-slate-800">
+                  Relatório de Segurança Digital.pdf
+                </div>
+
+                <div className="mt-1 text-xs text-slate-400">
+                  1,8 MB · preparado pelo SICSI Drive
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              <GlassButton
+                icon={FileText}
+                variant="secondary"
+                onClick={onOpenFile}
+              >
+                Abrir documento
+              </GlassButton>
+
+              <GlassButton
+                icon={ArrowLeft}
+                onClick={onBack}
+              >
+                Voltar ao documento
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SafeExitView({ onBack, onNext }) {
+  return (
+    <div className="mx-auto max-w-4xl">
+      <section className="overflow-hidden rounded-[32px] border border-emerald-200 bg-white shadow-xl shadow-emerald-100/40">
+
+        <div className="bg-gradient-to-br from-emerald-700 via-emerald-600 to-emerald-500 px-7 py-9 text-white sm:px-10 sm:py-12">
+          <div className="flex items-start gap-4">
+
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+              <ShieldCheck className="h-7 w-7" />
+            </div>
+
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100">
+                Simulação 04 · Feedback de segurança
+              </p>
+
+              <h1 className="mt-2 text-3xl font-black tracking-[-0.03em] sm:text-4xl">
+                Boa decisão: situação interrompida
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50">
+                A situação foi interrompida antes de permitir que a
+                transferência avançasse.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        <div className="space-y-5 p-7 sm:p-10">
+
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">
+              Decisão segura
+            </p>
+
+            <p className="mt-2 text-sm leading-7 text-emerald-800">
+              Ao sair do processo ou denunciar a situação, interrompeu a
+              cadeia antes de a transferência ser processada no cenário.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                Transferência
+              </p>
+
+              <p className="mt-2 text-sm font-black text-emerald-950">
+                NÃO PROCESSADA
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                Documento
+              </p>
+
+              <p className="mt-2 text-sm font-black text-emerald-950">
+                NÃO ENTREGUE
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                Decisão
+              </p>
+
+              <p className="mt-2 text-sm font-black text-emerald-950">
+                SEGURA
+              </p>
+            </div>
+
+          </div>
+
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
+              Lição de segurança
+            </p>
+
+            <p className="mt-2 text-sm font-black leading-6 text-blue-950">
+              Quando uma solicitação não puder ser validada, pare e utilize
+              os canais oficiais para confirmar a situação ou denunciar o
+              conteúdo suspeito.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onNext}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+          >
+            Próxima simulação
+            <ArrowRight className="h-4 w-4" />
+          </button>
+
+        </div>
+      </section>
+    </div>
+  );
+}
+function CompletedView({
+  onFinish,
+  onNext,
+}) {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50">
+      <div className="mx-auto max-w-2xl px-4 py-12 md:py-20">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="bg-gradient-to-br from-blue-800 via-blue-700 to-blue-500 p-8 text-white md:p-10">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-md">
+              <FileCheck2 size={27} />
+            </div>
+
+            <div className="mt-7 text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
+              Phishing 04
+            </div>
+
+            <h1 className="mt-2 text-3xl font-bold">
+              Simulação concluída
+            </h1>
+
+            <p className="mt-3 max-w-xl text-sm leading-6 text-white/75">
+              O percurso documental desta experiência foi encerrado e as
+              interacções da sessão foram registadas.
+            </p>
+          </div>
+
+          <div className="p-7 md:p-9">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <CompletionItem
+                icon={FileText}
+                label="Experiência"
+                value="Documento partilhado"
+              />
+
+              <CompletionItem
+                icon={History}
+                label="Percurso"
+                value="Registado"
+              />
+
+              <CompletionItem
+                icon={ShieldCheck}
+                label="Sessão"
+                value="Encerrada"
+              />
+            </div>
+
+            <div className="mt-8 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <GlassButton
+                variant="secondary"
+                onClick={onFinish}
+              >
+                Concluir simulação
+              </GlassButton>
+
+              <GlassButton
+                icon={ArrowRight}
+                onClick={onNext}
+              >
+                Próxima simulação
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompletionItem({
+  icon: Icon,
+  label,
+  value,
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <Icon size={17} className="text-blue-700" />
+
+      <div className="mt-4 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+        {label}
+      </div>
+
+      <div className="mt-1 text-xs font-bold text-slate-700">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+export default function Phishing04Page() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const accountEmail = useMemo(
+    () => getCurrentAccount(user),
+    [user]
+  );
+
+  const [state, setState] = useState(STATES.HOME);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [panel, setPanel] = useState(null);
+  const [selectedVersion, setSelectedVersion] = useState(null);
+  const [selectedDownloadFormat, setSelectedDownloadFormat] = useState(null);
+
+  const [shareScope, setShareScope] = useState("specific");
+  useEffect(() => {
+    createInitialSession();
+
+    if (!sessionStarted) {
+      registerAction({
+        action: "simulation_started",
+        nextState: STATES.HOME,
+        interactionType: "system",
+        metadata: {
+          account_present: Boolean(accountEmail),
+        },
+      });
+
+      setSessionStarted(true);
+    }
+  }, [accountEmail, sessionStarted]);
+
+  function goHome() {
+    registerNavigation(
+      "return_to_simulations",
+      "simulations",
+      {
+        destination: "/student/simulacoes",
+      }
+    );
+
+    navigate("/student/simulacoes");
+  }
+
+  function goBack() {
+    registerAction({
+      action: "leave_simulation_state",
+      nextState: state,
+      interactionType: "navigation",
+      metadata: {
+        state,
+      },
+    });
+
+    navigate(-1);
+  }
+
+  function openSearch() {
+    setSearchOpen((value) => !value);
+
+    registerAction({
+      action: "toggle_document_search",
+      nextState: STATES.HOME,
+      interactionType: "interaction",
+      metadata: {
+        open: !searchOpen,
+      },
+    });
+  }
+
+  function openAssociatedAttachment() {
+    registerAction({
+      action: "open_associated_attachment",
+      nextState: STATES.ATTACHMENT_RESULT,
+      interactionType: "interaction",
+      metadata: {
+        file_type: "xlsx",
+        content_stored: false,
+      },
+    });
+
+    setState(STATES.ATTACHMENT_RESULT);
+  }
+  function openDocument() {
+    registerNavigation(
+      "open_shared_document",
+      STATES.DOCUMENT_VIEWER,
+      {
+        document_id: "shared-document-2026-04",
+        document_type: "institutional_report",
+      }
+    );
+
+    setState(STATES.DOCUMENT_VIEWER);
+    setSearchOpen(false);
+  }
+
+  function openHistory() {
+    registerNavigation(
+      "open_version_history",
+      STATES.VERSION_HISTORY
+    );
+
+    setPanel("history");
+  }
+
+  function openAccess() {
+    registerNavigation(
+      "open_access_details",
+      STATES.ACCESS_DETAILS
+    );
+
+    setPanel("access");
+  }
+
+  function openShare() {
+    registerNavigation(
+      "open_share_panel",
+      STATES.SHARE_PANEL
+    );
+
+    setPanel("share");
+  }
+
+  function openExternalShare() {
+    registerNavigation(
+      "open_external_share_configuration",
+      STATES.SHARE_EXTERNAL
+    );
+
+    setPanel("external");
+  }
+
+  function openComments() {
+    registerNavigation(
+      "open_document_comments",
+      STATES.COMMENT_PANEL
+    );
+
+    setPanel("comments");
+  }
+
+  function openDownload() {
+    registerNavigation(
+      "open_download_panel",
+      STATES.DOWNLOAD_PANEL
+    );
+
+    setPanel("download");
+  }
+
+  function requestAccess() {
+    setPanel(null);
+
+    registerNavigation(
+      "open_access_request",
+      STATES.ACCESS_REQUEST
+    );
+
+    setState(STATES.ACCESS_REQUEST);
+  }
+
+  function continueIdentityCheck() {
+    registerNavigation(
+      "continue_identity_check",
+      STATES.AUTHENTICATION
+    );
+
+    setState(STATES.AUTHENTICATION);
+  }
+
+  function submitAuthentication() {
+    setState(STATES.AUTH_PROCESSING);
+  }
+
+  function authenticationProcessed() {
+    registerAction({
+      action: "authentication_service_response",
+      nextState: STATES.AUTH_RESULT,
+      interactionType: "system",
+      metadata: {
+        result: "service_unavailable",
+      },
+    });
+
+    setState(STATES.AUTH_RESULT);
+  }
+
+  function returnFromAuthentication() {
+    registerNavigation(
+      "return_to_document_after_authentication",
+      STATES.DOCUMENT_VIEWER
+    );
+
+    setState(STATES.DOCUMENT_VIEWER);
+  }
+
+  function startDownload(format = "PDF") {
+    setSelectedDownloadFormat(format);
+    setPanel(null);
+
+    registerNavigation(
+      "continue_document_download",
+      STATES.DOWNLOAD_PROCESSING,
+      {
+        format,
+      }
+    );
+
+    setState(STATES.DOWNLOAD_PROCESSING);
+  }
+
+  function downloadProcessed() {
+    const format = selectedDownloadFormat || "PDF";
+
+    registerAction({
+      action: "document_download_prepared",
+      nextState: STATES.DOWNLOAD_RESULT,
+      interactionType: "system",
+      metadata: {
+        file_name: "Relatório de Segurança Digital",
+        format,
+        content_stored: false,
+      },
+    });
+
+    setState(STATES.DOWNLOAD_RESULT);
+  }
+
+  function reopenDownloadedDocument() {
+    registerNavigation(
+      "open_prepared_document",
+      STATES.DOCUMENT_VIEWER
+    );
+
+    setState(STATES.DOCUMENT_VIEWER);
+  }
+
+  function returnToDocument() {
+    registerNavigation(
+      "return_to_document",
+      STATES.DOCUMENT_VIEWER
+    );
+
+    setState(STATES.DOCUMENT_VIEWER);
+  }
+
+  function selectVersion(version) {
+    setSelectedVersion(version);
+
+    registerAction({
+      action: "select_document_version",
+      nextState: STATES.VERSION_HISTORY,
+      interactionType: "selection",
+      metadata: {
+        version,
+      },
+    });
+  }
+
+  function applyExternalConfiguration(scope) {
+    registerAction({
+      action: "apply_external_share_configuration",
+      nextState: STATES.SHARE_RESULT,
+      interactionType: "action",
+      metadata: {
+        configuration_applied: true,
+        scope,
+      },
+    });
+
+    setShareScope(scope);
+    setPanel(null);
+    setState(STATES.SHARE_RESULT);
+  }
+
+  function copyShareLink() {
+    registerAction({
+      action: "copy_document_share_link",
+      nextState: STATES.SHARE_PANEL,
+      interactionType: "action",
+      metadata: {
+        content_stored: false,
+      },
+    });
+  }
+
+  function cancelSimulation() {
+    registerAction({
+      action: "leave_simulation",
+      nextState: STATES.SAFE_EXIT,
+      interactionType: "navigation",
+      metadata: {
+        source_state: state,
+      },
+    });
+
+    setPanel(null);
+    setState(STATES.SAFE_EXIT);
+  }
+
+function reportSimulation() {
+  registerAction({
+    action: "report_suspicious_document",
+    nextState: STATES.SAFE_EXIT,
+    interactionType: "report",
+    metadata: {
+      source_state: state,
+    },
+  });
+
+  setPanel(null);
+  setState(STATES.SAFE_EXIT);
+}
+  function nextSimulation() {
+    registerNavigation(
+      "continue_to_simulation_05",
+      "phishing-05",
+      {
+        destination: "/student/simulacoes/phishing/05",
+        source_state: state,
+      }
+    );
+
+    navigate("/student/simulacoes/phishing/05");
+  }
+
+  function finishSimulation() {
+    registerAction({
+      action: "complete_simulation",
+      nextState: STATES.COMPLETED,
+      interactionType: "completion",
+    });
+
+    completeSimulationSession();
+
+    registerNavigation(
+      "return_to_simulations",
+      "simulations",
+      {
+        destination: "/student/simulacoes",
+      }
+    );
+
+    navigate("/student/simulacoes");
+  }
+
+  function renderState() {
+    if (state === STATES.HOME) {
+      return (
+        <DocumentHome
+          onOpenDocument={openDocument}
+          onShared={() =>
+            registerNavigation(
+              "open_shared_documents",
+              STATES.HOME
+            )
+          }
+          onSearch={openSearch}
+          searchOpen={searchOpen}
+        />
+      );
+    }
+
+    if (state === STATES.DOCUMENT_VIEWER) {
+      return (
+        <div className="relative">
+          <DocumentViewer
+            onBack={() => {
+              registerNavigation(
+                "return_to_document_list",
+                STATES.HOME
+              );
+
+              setState(STATES.HOME);
+            }}
+            onHistory={openHistory}
+            onAccess={openAccess}
+            onShare={openShare}
+            onComment={openComments}
+            onDownload={openDownload}
+            onAttachment={openAssociatedAttachment}
+          />
+
+          {panel === "history" ? (
+            <HistoryPanel
+              onClose={() => setPanel(null)}
+              onVersion={selectVersion}
+            />
+          ) : null}
+
+          {panel === "access" ? (
+            <AccessPanel
+              onClose={() => setPanel(null)}
+              onRequestAccess={requestAccess}
+              onShare={openShare}
+            />
+          ) : null}
+
+          {panel === "share" ? (
+            <SharePanel
+              onClose={() => setPanel(null)}
+              onExternal={openExternalShare}
+              onCopyLink={copyShareLink}
+            />
+          ) : null}
+
+          {panel === "external" ? (
+            <ExternalSharePanel
+              onClose={() => setPanel(null)}
+              onContinue={applyExternalConfiguration}
+            />
+          ) : null}
+
+          {panel === "comments" ? (
+            <CommentPanel
+              onClose={() => setPanel(null)}
+            />
+          ) : null}
+
+          {panel === "download" ? (
+            <DownloadPanel
+              onClose={() => setPanel(null)}
+              onContinue={startDownload}
+            />
+          ) : null}
+
+          {selectedVersion ? (
+            <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 shadow-xl">
+              Versão {selectedVersion} seleccionada
+
+              <button
+                type="button"
+                onClick={() => setSelectedVersion(null)}
+                className="ml-3 text-slate-400 hover:text-slate-700"
+              >
+                Fechar
+              </button>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (state === STATES.SHARE_RESULT) {
+      return (
+        <ShareConfigurationResultView
+          scope={shareScope}
+          onBack={() => {
+            registerNavigation(
+              "return_to_document_after_share_configuration",
+              STATES.DOCUMENT_VIEWER
+            );
+
+            setState(STATES.DOCUMENT_VIEWER);
+          }}
+          onNext={nextSimulation}
+        />
+      );
+    }
+    if (state === STATES.ACCESS_REQUEST) {
+      return (
+        <RequestAccessView
+          account={accountEmail}
+          onBack={returnToDocument}
+          onContinue={continueIdentityCheck}
+        />
+      );
+    }
+
+    if (state === STATES.IDENTITY_CHECK) {
+      return (
+        <IdentityCheckView
+          account={accountEmail}
+          onBack={() => {
+            registerNavigation(
+              "return_to_access_request",
+              STATES.ACCESS_REQUEST
+            );
+
+            setState(STATES.ACCESS_REQUEST);
+          }}
+          onContinue={continueIdentityCheck}
+        />
+      );
+    }
+
+    if (state === STATES.AUTHENTICATION) {
+      return (
+        <AuthenticationView
+          account={accountEmail}
+          onBack={() => {
+            registerNavigation(
+              "return_to_identity_check",
+              STATES.IDENTITY_CHECK
+            );
+
+            setState(STATES.IDENTITY_CHECK);
+          }}
+          onSubmit={submitAuthentication}
+        />
+      );
+    }
+
+    if (state === STATES.AUTH_PROCESSING) {
+      return (
+        <AuthenticationProcessingView
+          onContinue={authenticationProcessed}
+        />
+      );
+    }
+
+    if (state === STATES.AUTH_RESULT) {
+      return (
+        <AuthenticationResultView
+          onBack={() => {
+            registerNavigation(
+              "return_to_authentication",
+              STATES.AUTHENTICATION
+            );
+
+            setState(STATES.AUTHENTICATION);
+          }}
+          onReturn={returnFromAuthentication}
+        />
+      );
+    }
+
+    if (state === STATES.DOWNLOAD_PROCESSING) {
+      return (
+        <DownloadProcessingView
+          onContinue={downloadProcessed}
+        />
+      );
+    }
+
+    if (state === STATES.DOWNLOAD_RESULT) {
+      return (
+        <DownloadResultView
+          format={selectedDownloadFormat}
+          onBack={returnToDocument}
+          onNext={nextSimulation}
+        />
+      );
+    }
+
+    if (state === STATES.DOWNLOAD_READY) {
+      return (
+        <DownloadReadyView
+          onBack={returnToDocument}
+          onOpenFile={reopenDownloadedDocument}
+        />
+      );
+    }
+
+    if (state === STATES.ATTACHMENT_RESULT) {
+      return (
+        <AttachmentResultView
+          onBack={() => {
+            registerNavigation(
+              "return_to_document_after_attachment",
+              STATES.DOCUMENT_VIEWER
+            );
+
+            setState(STATES.DOCUMENT_VIEWER);
+          }}
+          onNext={nextSimulation}
+        />
+      );
+    }
+
+    if (state === STATES.SAFE_EXIT) {
+      return (
+        <SafeExitView
+          onBack={returnToDocument}
+          onNext={nextSimulation}
+        />
+      );
+    }
+
+    if (state === STATES.COMPLETED) {
+      return (
+        <CompletedView
+          onFinish={finishSimulation}
+          onNext={nextSimulation}
+        />
+      );
+    }
+
+    return (
+      <DocumentHome
+        onOpenDocument={openDocument}
+        onShared={() =>
+          registerNavigation(
+            "open_shared_documents",
+            STATES.HOME
+          )
+        }
+        onSearch={openSearch}
+        searchOpen={searchOpen}
+      />
+    );
+  }
+
+  return (
+    <AppShell
+      account={accountEmail}
+      onBack={cancelSimulation}
+      onHome={goHome}
+      onSearch={openSearch}
+      searchOpen={searchOpen}
+    >
+      {renderState()}
+
+      {state !== STATES.HOME &&
+      state !== STATES.COMPLETED &&
+      state !== STATES.SAFE_EXIT &&
+       state !== STATES.SHARE_RESULT &&
+      state !== STATES.AUTHENTICATION &&
+      state !== STATES.AUTH_PROCESSING &&
+      state !== STATES.AUTH_RESULT &&
+      state !== STATES.IDENTITY_CHECK &&
+      state !== STATES.ACCESS_REQUEST &&
+      state !== STATES.DOWNLOAD_PROCESSING &&
+      state !== STATES.DOWNLOAD_READY ? (
+        <div className="sticky bottom-0 z-30 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur-xl md:px-8">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
+              <PanelRight size={15} />
+              <span>Documento partilhado · Sessão activa</span>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={cancelSimulation}
+                className="inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+              >
+                <X size={16} />
+                Sair
+              </button>
+              <button
+                type="button"
+                onClick={reportSimulation}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-100"
+              >
+                <ShieldAlert className="h-4 w-4" />
+                Denunciar
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  registerNavigation(
+                    "continue_simulation_from_current_state",
+                    STATES.DOCUMENT_VIEWER,
+                    {
+                      source_state: state,
+                    }
+                  );
+
+                  setState(STATES.DOCUMENT_VIEWER);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-800"
+              >
+                <ArrowRight size={16} />
+                Continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </AppShell>
+  );
+}
+
+
+

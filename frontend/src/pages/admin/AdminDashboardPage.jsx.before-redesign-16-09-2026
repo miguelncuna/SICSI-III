@@ -1,0 +1,654 @@
+﻿import { useEffect, useState } from "react";
+import {
+  BookOpen,
+  Users,
+  Award,
+  Plus,
+  Trash2,
+  Save,
+  Video,
+  FileQuestion,
+  ShieldCheck,
+  UserCog,
+} from "lucide-react";
+
+const API = "http://127.0.0.1:8000/api";
+
+async function api(url, options = {}) {
+  const response = await fetch(`${API}${url}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.detail || "Erro ao comunicar com o servidor."
+    );
+  }
+
+  return data;
+}
+
+export default function AdminDashboardPage() {
+  const [stats, setStats] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [certificates, setCertificates] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [tab, setTab] = useState("courses");
+  const [message, setMessage] = useState("");
+
+  async function load() {
+    const [s, c, u, cert] = await Promise.all([
+      api("/admin/stats"),
+      api("/admin/courses"),
+      api("/users"),
+      api("/certificates"),
+    ]);
+
+    setStats(s);
+    setCourses(c);
+    setUsers(u);
+    setCertificates(cert);
+  }
+
+  useEffect(() => {
+    load().catch((error) => setMessage(error.message));
+  }, []);
+
+  async function createCourse() {
+    const title = window.prompt("Nome do novo curso:");
+
+    if (!title) return;
+
+    const description =
+      window.prompt("Descrição do curso:") || "";
+
+    await api("/admin/courses", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        description,
+        published: true,
+      }),
+    });
+
+    await load();
+  }
+
+  async function deleteCourse(id) {
+    if (!window.confirm("Eliminar este curso?")) return;
+
+    await api(`/admin/courses/${id}`, {
+      method: "DELETE",
+    });
+
+    if (selectedCourse?.id === id) {
+      setSelectedCourse(null);
+    }
+
+    await load();
+  }
+
+  async function toggleRole(user) {
+    const role =
+      user.role === "admin"
+        ? "student"
+        : "admin";
+
+    if (
+      !window.confirm(
+        `${role === "admin" ? "Promover" : "Remover administrador de"} ${user.name}?`
+      )
+    ) {
+      return;
+    }
+
+    await api(`/users/${user.id}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    });
+
+    await load();
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      <div className="border-b border-slate-800 bg-slate-900">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-500">
+              SICSI III
+            </p>
+            <h1 className="mt-1 text-2xl font-black">
+              Administração
+            </h1>
+          </div>
+
+          <ShieldCheck className="text-blue-500" size={30} />
+        </div>
+      </div>
+
+      <main className="mx-auto max-w-7xl p-5 sm:p-8">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat icon={Users} label="Utilizadores" value={stats?.users ?? "—"} />
+          <Stat icon={BookOpen} label="Cursos" value={stats?.courses ?? "—"} />
+          <Stat icon={Award} label="Certificados" value={stats?.certificates ?? "—"} />
+          <Stat icon={UserCog} label="Administradores" value={stats?.admins ?? "—"} />
+        </div>
+
+        {message && (
+          <div className="mt-5 rounded-xl bg-red-500/10 p-4 text-sm text-red-300">
+            {message}
+          </div>
+        )}
+
+        <div className="mt-8 flex flex-wrap gap-2 rounded-2xl border border-slate-800 bg-slate-900 p-2">
+          <Tab active={tab === "courses"} onClick={() => setTab("courses")}>
+            <BookOpen size={16} />
+            Cursos
+          </Tab>
+
+          <Tab active={tab === "users"} onClick={() => setTab("users")}>
+            <Users size={16} />
+            Utilizadores
+          </Tab>
+
+          <Tab active={tab === "certificates"} onClick={() => setTab("certificates")}>
+            <Award size={16} />
+            Certificados
+          </Tab>
+        </div>
+
+        {tab === "courses" && (
+          <section className="mt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black">
+                  Gestão de cursos
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Crie cursos, vídeos e testes finais.
+                </p>
+              </div>
+
+              <button
+                onClick={createCourse}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold hover:bg-blue-500"
+              >
+                <Plus size={17} />
+                Novo curso
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-5 lg:grid-cols-[360px_1fr]">
+              <div className="space-y-3">
+                {courses.map((course) => (
+                  <button
+                    key={course.id}
+                    onClick={() => setSelectedCourse(course)}
+                    className={`w-full rounded-2xl border p-5 text-left ${
+                      selectedCourse?.id === course.id
+                        ? "border-blue-500 bg-blue-500/10"
+                        : "border-slate-800 bg-slate-900 hover:bg-slate-800"
+                    }`}
+                  >
+                    <div className="flex justify-between gap-3">
+                      <BookOpen
+                        size={20}
+                        className="text-blue-500"
+                      />
+
+                      <span className="text-xs text-slate-500">
+                        {course.lessons_count} aulas
+                      </span>
+                    </div>
+
+                    <h3 className="mt-4 font-bold">
+                      {course.title}
+                    </h3>
+
+                    <p className="mt-2 line-clamp-2 text-xs text-slate-500">
+                      {course.description}
+                    </p>
+
+                    <p className="mt-4 text-xs text-blue-400">
+                      {course.questions_count}/10 perguntas
+                    </p>
+                  </button>
+                ))}
+              </div>
+
+              {selectedCourse ? (
+                <CourseEditor
+                  course={selectedCourse}
+                  onChanged={async () => {
+                    const data = await api(
+                      `/courses/${selectedCourse.id}`
+                    );
+
+                    setSelectedCourse(data);
+                    await load();
+                  }}
+                  onDelete={deleteCourse}
+                />
+              ) : (
+                <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900">
+                  <div className="text-center">
+                    <BookOpen
+                      size={42}
+                      className="mx-auto text-slate-700"
+                    />
+
+                    <p className="mt-4 font-semibold">
+                      Seleccione um curso
+                    </p>
+
+                    <p className="mt-2 text-sm text-slate-500">
+                      O editor aparecerá aqui.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {tab === "users" && (
+          <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="text-2xl font-black">
+              Utilizadores
+            </h2>
+
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full min-w-[650px] text-left text-sm">
+                <thead className="border-b border-slate-800 text-slate-500">
+                  <tr>
+                    <th className="pb-4">Nome</th>
+                    <th className="pb-4">Email</th>
+                    <th className="pb-4">Função</th>
+                    <th className="pb-4">Acção</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {users.map((user) => (
+                    <tr
+                      key={user.id}
+                      className="border-b border-slate-800"
+                    >
+                      <td className="py-4 font-semibold">
+                        {user.name}
+                      </td>
+
+                      <td className="py-4 text-slate-500">
+                        {user.email}
+                      </td>
+
+                      <td className="py-4">
+                        <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs text-blue-400">
+                          {user.role === "admin"
+                            ? "Administrador"
+                            : "Estudante"}
+                        </span>
+                      </td>
+
+                      <td className="py-4">
+                        <button
+                          onClick={() => toggleRole(user)}
+                          className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold hover:bg-slate-800"
+                        >
+                          {user.role === "admin"
+                            ? "Tornar estudante"
+                            : "Promover a Admin"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {tab === "certificates" && (
+          <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="text-2xl font-black">
+              Certificados emitidos
+            </h2>
+
+            <div className="mt-6 space-y-3">
+              {certificates.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Ainda não existem certificados.
+                </p>
+              ) : (
+                certificates.map((certificate) => (
+                  <div
+                    key={certificate.id}
+                    className="flex flex-col justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-5 sm:flex-row sm:items-center"
+                  >
+                    <div>
+                      <p className="font-bold">
+                        {certificate.student_name}
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        {certificate.course_title}
+                      </p>
+                    </div>
+
+                    <span className="font-bold text-emerald-400">
+                      {certificate.score}%
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+
+function CourseEditor({ course, onChanged, onDelete }) {
+  const [lessonTitle, setLessonTitle] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+
+  const [question, setQuestion] = useState("");
+  const [options, setOptions] = useState([
+    "",
+    "",
+    "",
+    "",
+  ]);
+  const [correct, setCorrect] = useState(0);
+  const [explanation, setExplanation] = useState("");
+
+  const [saving, setSaving] = useState(false);
+
+  async function addLesson() {
+    if (!lessonTitle || !videoUrl) return;
+
+    setSaving(true);
+
+    try {
+      await api(`/admin/courses/${course.id}/lessons`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: lessonTitle,
+          video_url: videoUrl,
+        }),
+      });
+
+      setLessonTitle("");
+      setVideoUrl("");
+      await onChanged();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeLesson(id) {
+    if (!window.confirm("Remover esta aula?")) return;
+
+    await api(
+      `/admin/courses/${course.id}/lessons/${id}`,
+      { method: "DELETE" }
+    );
+
+    await onChanged();
+  }
+
+  async function addQuestion() {
+    if (
+      !question.trim() ||
+      options.some((option) => !option.trim())
+    ) {
+      alert("Preencha a pergunta e as quatro opções.");
+      return;
+    }
+
+    await api(`/admin/courses/${course.id}/questions`, {
+      method: "POST",
+      body: JSON.stringify({
+        question,
+        options,
+        correct_answer: Number(correct),
+        explanation,
+      }),
+    });
+
+    setQuestion("");
+    setOptions(["", "", "", ""]);
+    setCorrect(0);
+    setExplanation("");
+
+    await onChanged();
+  }
+
+  async function removeQuestion(id) {
+    if (!window.confirm("Remover esta pergunta?")) return;
+
+    await api(
+      `/admin/courses/${course.id}/questions/${id}`,
+      { method: "DELETE" }
+    );
+
+    await onChanged();
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-blue-400">
+            Editor
+          </p>
+
+          <h2 className="mt-1 text-2xl font-black">
+            {course.title}
+          </h2>
+        </div>
+
+        <button
+          onClick={() => onDelete(course.id)}
+          className="rounded-lg p-2 text-red-400 hover:bg-red-500/10"
+        >
+          <Trash2 size={18} />
+        </button>
+      </div>
+
+      <div className="mt-8">
+        <div className="flex items-center gap-2">
+          <Video size={19} className="text-blue-500" />
+          <h3 className="font-bold">
+            Vídeos / Aulas
+          </h3>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <input
+            value={lessonTitle}
+            onChange={(e) => setLessonTitle(e.target.value)}
+            placeholder="Título da aula"
+            className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <input
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            placeholder="URL do vídeo"
+            className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <button
+            onClick={addLesson}
+            disabled={saving}
+            className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold"
+          >
+            <Plus size={17} />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {course.lessons.map((lesson, index) => (
+            <div
+              key={lesson.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-blue-400">
+                  {index + 1}
+                </span>
+
+                <div>
+                  <p className="text-sm font-semibold">
+                    {lesson.title}
+                  </p>
+
+                  <p className="mt-1 max-w-[420px] truncate text-xs text-slate-600">
+                    {lesson.video_url}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => removeLesson(lesson.id)}
+                className="text-red-400"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-10 border-t border-slate-800 pt-8">
+        <div className="flex items-center gap-2">
+          <FileQuestion size={19} className="text-blue-500" />
+          <h3 className="font-bold">
+            Teste final — {course.questions_count}/10
+          </h3>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Pergunta"
+            rows={3}
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          {options.map((option, index) => (
+            <div
+              key={index}
+              className="flex items-center gap-3"
+            >
+              <input
+                type="radio"
+                checked={Number(correct) === index}
+                onChange={() => setCorrect(index)}
+              />
+
+              <input
+                value={option}
+                onChange={(e) => {
+                  const next = [...options];
+                  next[index] = e.target.value;
+                  setOptions(next);
+                }}
+                placeholder={`Opção ${index + 1}`}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500"
+              />
+            </div>
+          ))}
+
+          <textarea
+            value={explanation}
+            onChange={(e) => setExplanation(e.target.value)}
+            placeholder="Explicação da resposta"
+            rows={3}
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-blue-500"
+          />
+
+          <button
+            onClick={addQuestion}
+            disabled={course.questions_count >= 10}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Save size={17} />
+            Adicionar pergunta
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-2">
+          {course.questions.map((item, index) => (
+            <div
+              key={item.id}
+              className="flex items-start justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4"
+            >
+              <div>
+                <p className="text-xs text-blue-400">
+                  Questão {index + 1}
+                </p>
+
+                <p className="mt-1 text-sm font-semibold">
+                  {item.question}
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Resposta:{" "}
+                  {item.options[item.correct_answer]}
+                </p>
+              </div>
+
+              <button
+                onClick={() => removeQuestion(item.id)}
+                className="shrink-0 text-red-400"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function Stat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <Icon size={21} className="text-blue-500" />
+      <p className="mt-5 text-3xl font-black">{value}</p>
+      <p className="mt-1 text-sm text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+
+function Tab({ active, children, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${
+        active
+          ? "bg-blue-600 text-white"
+          : "text-slate-500 hover:bg-slate-800 hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}

@@ -1,0 +1,1153 @@
+﻿from pathlib import Path
+from datetime import datetime, timezone
+from uuid import uuid4
+import json
+
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
+
+
+router = APIRouter(
+    tags=["Course Admin v2"]
+)
+
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "data" / "courses.json"
+
+
+TOTAL_PERGUNTAS = 10
+TOTAL_OPCOES = 4
+
+
+class VideoInput(BaseModel):
+    title: str
+    description: str
+    link: str
+
+
+class QuestionInput(BaseModel):
+    question: str
+    options: list[str]
+    correct_answer: int
+
+
+class CourseInput(BaseModel):
+    title: str
+    description: str
+    link: str
+    published: bool = False
+    videos: list[VideoInput] = []
+    questions: list[QuestionInput]
+
+
+class PublishInput(BaseModel):
+    published: bool
+
+
+class VideoEditInput(BaseModel):
+    title: str
+    description: str
+    link: str
+
+
+def agora():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def ler_cursos():
+    if not DATA_PATH.exists():
+        raise HTTPException(
+            status_code=500,
+            detail="courses.json não foi encontrado.",
+        )
+
+    try:
+        dados = json.loads(
+            DATA_PATH.read_text(
+                encoding="utf-8"
+            )
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Não foi possível ler courses.json: {exc}",
+        )
+
+    if not isinstance(dados, list):
+        raise HTTPException(
+            status_code=500,
+            detail="courses.json não contém uma lista de cursos.",
+        )
+
+    return dados
+
+
+def guardar_cursos(cursos):
+    temporario = DATA_PATH.with_suffix(
+        ".json.tmp"
+    )
+
+    temporario.write_text(
+        json.dumps(
+            cursos,
+            ensure_ascii=False,
+            indent=2,
+        ) + "\n",
+        encoding="utf-8",
+    )
+
+    temporario.replace(
+        DATA_PATH
+    )
+
+
+def localizar_curso(
+    cursos,
+    course_id,
+):
+    for curso in cursos:
+        if (
+            isinstance(curso, dict)
+            and curso.get("id")
+            == course_id
+        ):
+            return curso
+
+    raise HTTPException(
+        status_code=404,
+        detail="Curso não encontrado.",
+    )
+
+
+def validar_url(
+    url,
+    nome,
+):
+    valor = str(
+        url or ""
+    ).strip()
+
+    if not valor:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{nome} é obrigatório.",
+        )
+
+    if not (
+        valor.startswith(
+            "http://"
+        )
+        or valor.startswith(
+            "https://"
+        )
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{nome} deve começar por http:// ou https://.",
+        )
+
+    return valor
+
+
+def validar_curso_basico(
+    title,
+    description,
+    link,
+):
+    titulo = str(
+        title or ""
+    ).strip()
+
+    descricao = str(
+        description or ""
+    ).strip()
+
+    if not titulo:
+        raise HTTPException(
+            status_code=422,
+            detail="O título do curso é obrigatório.",
+        )
+
+    if not descricao:
+        raise HTTPException(
+            status_code=422,
+            detail="A descrição do curso é obrigatória.",
+        )
+
+    url = validar_url(
+        link,
+        "O link do curso",
+    )
+
+    return (
+        titulo,
+        descricao,
+        url,
+    )
+
+
+def validar_videos(
+    videos,
+):
+    if not isinstance(
+        videos,
+        list,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Os vídeos devem ser uma lista.",
+        )
+
+    resultado = []
+
+    for indice, video in enumerate(
+        videos,
+        start=1,
+    ):
+        titulo = str(
+            video.title or ""
+        ).strip()
+
+        descricao = str(
+            video.description or ""
+        ).strip()
+
+        if not titulo:
+            raise HTTPException(
+                status_code=422,
+                detail=f"O título do vídeo {indice} é obrigatório.",
+            )
+
+        if not descricao:
+            raise HTTPException(
+                status_code=422,
+                detail=f"A descrição do vídeo {indice} é obrigatória.",
+            )
+
+        link = validar_url(
+            video.link,
+            f"O link do vídeo {indice}",
+        )
+
+        resultado.append(
+            {
+                "id": f"video_{uuid4().hex}",
+                "title": titulo,
+                "description": descricao,
+                "link": link,
+            }
+        )
+
+    return resultado
+
+
+def validar_perguntas(
+    perguntas,
+):
+    if not isinstance(
+        perguntas,
+        list,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="As perguntas devem ser uma lista.",
+        )
+
+    if len(perguntas) != TOTAL_PERGUNTAS:
+        raise HTTPException(
+            status_code=422,
+            detail="Cada curso deve possuir exactamente 10 perguntas.",
+        )
+
+    resultado = []
+
+    for indice, pergunta in enumerate(
+        perguntas,
+        start=1,
+    ):
+        texto = str(
+            pergunta.question or ""
+        ).strip()
+
+        if not texto:
+            raise HTTPException(
+                status_code=422,
+                detail=f"A pergunta {indice} está vazia.",
+            )
+
+        if not isinstance(
+            pergunta.options,
+            list,
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"A pergunta {indice} possui opções inválidas.",
+            )
+
+        if len(
+            pergunta.options
+        ) != TOTAL_OPCOES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"A pergunta {indice} deve possuir exactamente 4 opções.",
+            )
+
+        opcoes = [
+            str(opcao or "").strip()
+            for opcao
+            in pergunta.options
+        ]
+
+        if any(
+            not opcao
+            for opcao in opcoes
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Todas as 4 opções da pergunta {indice} são obrigatórias.",
+            )
+
+        correcta = int(
+            pergunta.correct_answer
+        )
+
+        if (
+            correcta < 0
+            or correcta >= TOTAL_OPCOES
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"A resposta correcta da pergunta {indice} é inválida.",
+            )
+
+        resultado.append(
+            {
+                "question": texto,
+                "options": opcoes,
+                "correct_answer": correcta,
+            }
+        )
+
+    return resultado
+
+
+def extrair_videos(curso):
+    videos = curso.get(
+        "videos"
+    )
+
+    if isinstance(
+        videos,
+        list,
+    ):
+        resultado = []
+
+        for video in videos:
+            if not isinstance(
+                video,
+                dict,
+            ):
+                continue
+
+            link = str(
+                video.get(
+                    "link",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if not link:
+                link = str(
+                    video.get(
+                        "video_url",
+                        "",
+                    )
+                    or ""
+                ).strip()
+
+            resultado.append(
+                {
+                    "id": video.get(
+                        "id",
+                        f"video_{uuid4().hex}",
+                    ),
+                    "title": str(
+                        video.get(
+                            "title",
+                            "",
+                        )
+                        or ""
+                    ),
+                    "description": str(
+                        video.get(
+                            "description",
+                            "",
+                        )
+                        or ""
+                    ),
+                    "link": link,
+                }
+            )
+
+        return resultado
+
+    # Compatibilidade com estruturas antigas
+    # que ainda utilizem lessons.
+    lessons = curso.get(
+        "lessons",
+        [],
+    )
+
+    if not isinstance(
+        lessons,
+        list,
+    ):
+        return []
+
+    resultado = []
+
+    for lesson in lessons:
+        if not isinstance(
+            lesson,
+            dict,
+        ):
+            continue
+
+        link = str(
+            lesson.get(
+                "video_url",
+                "",
+            )
+            or lesson.get(
+                "link",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if not link:
+            continue
+
+        resultado.append(
+            {
+                "id": lesson.get(
+                    "id",
+                    f"video_{uuid4().hex}",
+                ),
+                "title": str(
+                    lesson.get(
+                        "title",
+                        "",
+                    )
+                    or ""
+                ),
+                "description": str(
+                    lesson.get(
+                        "description",
+                        "",
+                    )
+                    or ""
+                ),
+                "link": link,
+            }
+        )
+
+    return resultado
+
+
+def preparar_perguntas(
+    novas,
+    antigas=None,
+):
+    antigas = (
+        antigas
+        if isinstance(
+            antigas,
+            list,
+        )
+        else []
+    )
+
+    resultado = []
+
+    for indice, pergunta in enumerate(
+        novas
+    ):
+        antiga = (
+            antigas[indice]
+            if indice < len(
+                antigas
+            )
+            and isinstance(
+                antigas[indice],
+                dict,
+            )
+            else {}
+        )
+
+        resultado.append(
+            {
+                "id": antiga.get(
+                    "id",
+                    f"question_{uuid4().hex}",
+                ),
+                "question": pergunta[
+                    "question"
+                ],
+                "options": pergunta[
+                    "options"
+                ],
+                "correct_answer": pergunta[
+                    "correct_answer"
+                ],
+                "explanation": antiga.get(
+                    "explanation",
+                    "",
+                ),
+            }
+        )
+
+    return resultado
+
+
+def preparar_videos(
+    novos,
+    antigos=None,
+):
+    antigas = (
+        antigas
+        if isinstance(
+            antigas,
+            list,
+        )
+        else []
+    )
+
+    resultado = []
+
+    for indice, video in enumerate(
+        novos
+    ):
+        antigo = (
+            antigas[indice]
+            if indice < len(
+                antigas
+            )
+            and isinstance(
+                antigas[indice],
+                dict,
+            )
+            else {}
+        )
+
+        resultado.append(
+            {
+                "id": antigo.get(
+                    "id",
+                    f"video_{uuid4().hex}",
+                ),
+                "title": video[
+                    "title"
+                ],
+                "description": video[
+                    "description"
+                ],
+                "link": video[
+                    "link"
+                ],
+            }
+        )
+
+    return resultado
+
+
+def curso_admin(curso):
+    perguntas = curso.get(
+        "questions",
+        [],
+    )
+
+    if not isinstance(
+        perguntas,
+        list,
+    ):
+        perguntas = []
+
+    videos = extrair_videos(
+        curso
+    )
+
+    return {
+        "id": curso.get(
+            "id"
+        ),
+        "title": curso.get(
+            "title",
+            "",
+        ),
+        "description": curso.get(
+            "description",
+            "",
+        ),
+        "link": curso.get(
+            "link",
+            "",
+        ),
+        "published": bool(
+            curso.get(
+                "published",
+                False,
+            )
+        ),
+        "videos": videos,
+        "videos_count": len(
+            videos
+        ),
+        "questions": perguntas,
+        "questions_count": len(
+            perguntas
+        ),
+        "created_at": curso.get(
+            "created_at"
+        ),
+        "updated_at": curso.get(
+            "updated_at"
+        ),
+    }
+
+
+@router.get(
+    "/courses"
+)
+def listar_cursos():
+    cursos = ler_cursos()
+
+    return [
+        curso_admin(
+            curso
+        )
+        for curso in cursos
+        if isinstance(
+            curso,
+            dict,
+        )
+    ]
+
+
+@router.get(
+    "/courses/{course_id}"
+)
+def obter_curso(
+    course_id: str,
+):
+    cursos = ler_cursos()
+
+    curso = localizar_curso(
+        cursos,
+        course_id,
+    )
+
+    return curso_admin(
+        curso
+    )
+
+
+@router.post(
+    "/courses"
+)
+def criar_curso(
+    body: CourseInput,
+):
+    cursos = ler_cursos()
+
+    titulo, descricao, link = (
+        validar_curso_basico(
+            body.title,
+            body.description,
+            body.link,
+        )
+    )
+
+    perguntas = validar_perguntas(
+        body.questions
+    )
+
+    videos = validar_videos(
+        body.videos
+    )
+
+    agora_valor = agora()
+
+    curso = {
+        "id": f"course_admin_{uuid4().hex}",
+        "title": titulo,
+        "description": descricao,
+        "published": bool(
+            body.published
+        ),
+        "link": link,
+        "lessons": [],
+        "videos": videos,
+        "questions": preparar_perguntas(
+            perguntas
+        ),
+        "created_at": agora_valor,
+        "updated_at": agora_valor,
+    }
+
+    cursos.append(
+        curso
+    )
+
+    guardar_cursos(
+        cursos
+    )
+
+    return curso_admin(
+        curso
+    )
+
+
+@router.put(
+    "/courses/{course_id}"
+)
+def actualizar_curso(
+    course_id: str,
+    body: CourseInput,
+):
+    cursos = ler_cursos()
+
+    curso = localizar_curso(
+        cursos,
+        course_id,
+    )
+
+    titulo, descricao, link = (
+        validar_curso_basico(
+            body.title,
+            body.description,
+            body.link,
+        )
+    )
+
+    perguntas = validar_perguntas(
+        body.questions
+    )
+
+    videos = validar_videos(
+        body.videos
+    )
+
+    antigas_perguntas = curso.get(
+        "questions",
+        [],
+    )
+
+    antigos_videos = extrair_videos(
+        curso
+    )
+
+    curso["title"] = titulo
+    curso["description"] = descricao
+    curso["link"] = link
+    curso["published"] = bool(
+        body.published
+    )
+
+    curso["questions"] = preparar_perguntas(
+        perguntas,
+        antigas_perguntas,
+    )
+
+    curso["videos"] = preparar_videos(
+        videos,
+        antigos_videos,
+    )
+
+    # A estrutura lessons antiga é preservada
+    # para não quebrar outras áreas do SICSI.
+    if "lessons" not in curso:
+        curso["lessons"] = []
+
+    curso["updated_at"] = agora()
+
+    guardar_cursos(
+        cursos
+    )
+
+    return curso_admin(
+        curso
+    )
+
+
+@router.patch(
+    "/courses/{course_id}/publish"
+)
+def alterar_publicacao(
+    course_id: str,
+    body: PublishInput,
+):
+    cursos = ler_cursos()
+
+    curso = localizar_curso(
+        cursos,
+        course_id,
+    )
+
+    curso["published"] = bool(
+        body.published
+    )
+
+    curso["updated_at"] = agora()
+
+    guardar_cursos(
+        cursos
+    )
+
+    return curso_admin(
+        curso
+    )
+
+
+@router.post(
+    "/courses/{course_id}/videos"
+)
+def adicionar_video(
+    course_id: str,
+    body: VideoEditInput,
+):
+    cursos = ler_cursos()
+
+    curso = localizar_curso(
+        cursos,
+        course_id,
+    )
+
+    titulo = str(
+        body.title or ""
+    ).strip()
+
+    descricao = str(
+        body.description or ""
+    ).strip()
+
+    if not titulo:
+        raise HTTPException(
+            status_code=422,
+            detail="O título do vídeo é obrigatório.",
+        )
+
+    if not descricao:
+        raise HTTPException(
+            status_code=422,
+            detail="A descrição do vídeo é obrigatória.",
+        )
+
+    link = validar_url(
+        body.link,
+        "O link do vídeo",
+    )
+
+    videos = extrair_videos(
+        curso
+    )
+
+    video = {
+        "id": f"video_{uuid4().hex}",
+        "title": titulo,
+        "description": descricao,
+        "link": link,
+    }
+
+    videos.append(
+        video
+    )
+
+    curso["videos"] = videos
+    curso["updated_at"] = agora()
+
+    guardar_cursos(
+        cursos
+    )
+
+    return curso_admin(
+        curso
+    )
+
+
+@router.put(
+    "/courses/{course_id}/videos/{video_id}"
+)
+def actualizar_video(
+    course_id: str,
+    video_id: str,
+    body: VideoEditInput,
+):
+    cursos = ler_cursos()
+
+    curso = localizar_curso(
+        cursos,
+        course_id,
+    )
+
+    titulo = str(
+        body.title or ""
+    ).strip()
+
+    descricao = str(
+        body.description or ""
+    ).strip()
+
+    if not titulo:
+        raise HTTPException(
+            status_code=422,
+            detail="O título do vídeo é obrigatório.",
+        )
+
+    if not descricao:
+        raise HTTPException(
+            status_code=422,
+            detail="A descrição do vídeo é obrigatória.",
+        )
+
+    link = validar_url(
+        body.link,
+        "O link do vídeo",
+    )
+
+    videos = extrair_videos(
+        curso
+    )
+
+    encontrado = False
+
+    for video in videos:
+        if str(
+            video.get("id")
+        ) == str(video_id):
+            video["title"] = titulo
+            video["description"] = descricao
+            video["link"] = link
+            encontrado = True
+            break
+
+    if not encontrado:
+        raise HTTPException(
+            status_code=404,
+            detail="Vídeo não encontrado.",
+        )
+
+    curso["videos"] = videos
+    curso["updated_at"] = agora()
+
+    guardar_cursos(
+        cursos
+    )
+
+    return curso_admin(
+        curso
+    )
+
+
+@router.delete(
+    "/courses/{course_id}/videos/{video_id}"
+)
+def eliminar_video(
+    course_id: str,
+    video_id: str,
+):
+    cursos = ler_cursos()
+
+    curso = localizar_curso(
+        cursos,
+        course_id,
+    )
+
+    videos = extrair_videos(
+        curso
+    )
+
+    antes = len(
+        videos
+    )
+
+    videos = [
+        video
+        for video in videos
+        if str(
+            video.get("id")
+        ) != str(video_id)
+    ]
+
+    if len(videos) == antes:
+        raise HTTPException(
+            status_code=404,
+            detail="Vídeo não encontrado.",
+        )
+
+    curso["videos"] = videos
+    curso["updated_at"] = agora()
+
+    guardar_cursos(
+        cursos
+    )
+
+    return curso_admin(
+        curso
+    )
+
+
+@router.put(
+    "/courses/{course_id}/questions/{question_id}"
+)
+def actualizar_pergunta(
+    course_id: str,
+    question_id: str,
+    pergunta: QuestionInput,
+):
+    cursos = ler_cursos()
+
+    curso = localizar_curso(
+        cursos,
+        course_id,
+    )
+
+    texto = str(
+        pergunta.question or ""
+    ).strip()
+
+    if not texto:
+        raise HTTPException(
+            status_code=422,
+            detail="A pergunta é obrigatória.",
+        )
+
+    if not isinstance(
+        pergunta.options,
+        list,
+    ) or len(
+        pergunta.options
+    ) != TOTAL_OPCOES:
+        raise HTTPException(
+            status_code=422,
+            detail="A pergunta deve possuir exactamente 4 opções.",
+        )
+
+    opcoes = [
+        str(opcao or "").strip()
+        for opcao
+        in pergunta.options
+    ]
+
+    if any(
+        not opcao
+        for opcao in opcoes
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="As 4 opções são obrigatórias.",
+        )
+
+    correcta = int(
+        pergunta.correct_answer
+    )
+
+    if (
+        correcta < 0
+        or correcta >= TOTAL_OPCOES
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="A resposta correcta é inválida.",
+        )
+
+    perguntas = curso.get(
+        "questions",
+        [],
+    )
+
+    encontrado = False
+
+    for item in perguntas:
+        if (
+            isinstance(
+                item,
+                dict,
+            )
+            and str(
+                item.get("id")
+            ) == str(question_id)
+        ):
+            item["question"] = texto
+            item["options"] = opcoes
+            item["correct_answer"] = correcta
+            item.setdefault(
+                "explanation",
+                "",
+            )
+            encontrado = True
+            break
+
+    if not encontrado:
+        raise HTTPException(
+            status_code=404,
+            detail="Pergunta não encontrada.",
+        )
+
+    curso["updated_at"] = agora()
+
+    guardar_cursos(
+        cursos
+    )
+
+    return curso_admin(
+        curso
+    )
+
+
+@router.delete(
+    "/courses/{course_id}"
+)
+def eliminar_curso(
+    course_id: str,
+    confirm: bool = Query(
+        default=False
+    ),
+):
+    if not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="A eliminação exige confirmação explícita.",
+        )
+
+    cursos = ler_cursos()
+
+    localizar_curso(
+        cursos,
+        course_id,
+    )
+
+    novos = [
+        item
+        for item in cursos
+        if not (
+            isinstance(
+                item,
+                dict,
+            )
+            and item.get("id")
+            == course_id
+        )
+    ]
+
+    guardar_cursos(
+        novos
+    )
+
+    return {
+        "success": True,
+        "message": "Curso eliminado com sucesso.",
+        "id": course_id,
+    }

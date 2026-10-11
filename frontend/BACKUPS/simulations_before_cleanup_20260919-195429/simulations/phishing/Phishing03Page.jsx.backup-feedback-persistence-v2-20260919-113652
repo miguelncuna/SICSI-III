@@ -1,0 +1,2588 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Banknote,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  CircleDollarSign,
+  Clock3,
+  Copy,
+  CreditCard,
+  Eye,
+  FileCheck2,
+  FileText,
+  Info,
+  Landmark,
+  LockKeyhole,
+  Menu,
+  MoreHorizontal,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Smartphone,
+  UserRound,
+  X,
+} from "lucide-react";
+
+import { useAuth } from "../../../../context/AuthContext";
+import {
+  completeSimulation,
+  getCurrentSimulation,
+  registerAction,
+  startSimulation,
+} from "./../engine/simulationEngine";
+
+const SIMULATION = {
+  area: "phishing",
+  id: "phishing-03",
+  number: 3,
+  title: "Pagamento",
+};
+
+const STATES = {
+  PAYMENT_HOME: "payment_home",
+  PAYMENT_DETAILS: "payment_details",
+  BENEFICIARY_VERIFICATION: "beneficiary_verification",
+  BENEFICIARY_CHANGED: "beneficiary_changed",
+  PAYMENT_CONFIRMATION: "payment_confirmation",
+  PAYMENT_AUTHENTICATION: "payment_authentication",
+  PAYMENT_PROCESSING: "payment_processing",
+  PAYMENT_RECEIPT: "payment_receipt",
+  CANCEL_FEEDBACK: "cancel_feedback",
+  OFFICIAL_CHECK: "official_check",
+  OFFICIAL_RESULT: "official_result",
+  COMPLETED: "completed",
+};
+
+const PAYMENT = {
+  reference: "PG-80421",
+  amount: "8 450,00 MZN",
+  amountNumeric: "8450.00",
+  beneficiaryOriginal: "Serviços Online MZ",
+  beneficiaryChanged: "Serviços Digitais MZ",
+  accountMasked: "•••• 2841",
+  description: "Regularização de pagamento",
+  date: "14 de Setembro de 2026",
+  time: "15:42",
+  deadline: "Hoje, 18:00",
+  channel: "Portal de pagamentos",
+  status: "Pendente",
+};
+
+function formatDuration(milliseconds) {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+
+  return `${minutes}m ${remaining}s`;
+}
+
+function createInitialSession() {
+  const existing = getCurrentSimulation();
+
+  if (
+    existing &&
+    existing.simulation_id === SIMULATION.id &&
+    !existing.completed
+  ) {
+    return existing;
+  }
+
+  const session = startSimulation({
+    area: SIMULATION.area,
+    simulationId: SIMULATION.id,
+    simulationNumber: SIMULATION.number,
+    initialState: STATES.PAYMENT_HOME,
+  });
+
+  registerAction({
+    action: "simulation_started",
+    nextState: STATES.PAYMENT_HOME,
+    interactionType: "lifecycle",
+    metadata: {
+      title: SIMULATION.title,
+    },
+  });
+
+  return getCurrentSimulation() || session;
+}
+
+function StatusPill({ children, tone = "slate" }) {
+  const tones = {
+    slate: "border-slate-200 bg-slate-50 text-slate-600",
+    blue: "border-blue-100 bg-blue-50 text-blue-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    red: "border-red-200 bg-red-50 text-red-700",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ${
+        tones[tone] || tones.slate
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function AccountRail({ accountName, accountEmail, onHome, active }) {
+  return (
+    <aside className="hidden w-[248px] shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
+      <div className="border-b border-slate-200 px-5 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+            <Landmark className="h-5 w-5" />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-sm font-black text-slate-950">
+              Conta Segura
+            </p>
+            <p className="mt-0.5 truncate text-[11px] text-slate-400">
+              Serviços financeiros
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 px-3 py-5">
+        <p className="px-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+          Área financeira
+        </p>
+
+        <nav className="mt-3 space-y-1">
+          <button
+            type="button"
+            onClick={onHome}
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition ${
+              active
+                ? "bg-blue-50 text-blue-700"
+                : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <CircleDollarSign className="h-4.5 w-4.5" />
+            Operações
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              registerAction({
+                action: "open_transactions_menu",
+                nextState: active
+                  ? STATES.PAYMENT_HOME
+                  : STATES.PAYMENT_HOME,
+                interactionType: "navigation",
+                metadata: {
+                  destination: "transactions",
+                },
+              })
+            }
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+          >
+            <FileText className="h-4.5 w-4.5" />
+            Movimentos
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              registerAction({
+                action: "open_security_menu",
+                nextState: active
+                  ? STATES.PAYMENT_HOME
+                  : STATES.PAYMENT_HOME,
+                interactionType: "navigation",
+                metadata: {
+                  destination: "security",
+                },
+              })
+            }
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+          >
+            <ShieldCheck className="h-4.5 w-4.5" />
+            Segurança
+          </button>
+        </nav>
+      </div>
+
+      <div className="border-t border-slate-200 p-4">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-600 shadow-sm">
+              <UserRound className="h-4 w-4" />
+            </div>
+
+            <div className="min-w-0">
+              <p className="truncate text-xs font-black text-slate-800">
+                {accountName}
+              </p>
+              <p className="mt-0.5 truncate text-[10px] text-slate-400">
+                {accountEmail || "Conta autenticada"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function MobileHeader({ onBack, onMenu }) {
+  return (
+    <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 lg:hidden">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100"
+        aria-label="Voltar"
+      >
+        <ArrowLeft className="h-5 w-5" />
+      </button>
+
+      <div className="flex items-center gap-2">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
+          <Landmark className="h-4 w-4" />
+        </div>
+        <span className="text-sm font-black text-slate-950">
+          Conta Segura
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={onMenu}
+        className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100"
+        aria-label="Menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+    </header>
+  );
+}
+
+function BalanceCard({ accountName }) {
+  return (
+    <section className="overflow-hidden rounded-[28px] bg-blue-700 text-white shadow-xl shadow-slate-300/40">
+      <div className="relative p-6 sm:p-7">
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="absolute -bottom-20 left-1/3 h-40 w-40 rounded-full bg-indigo-500/10 blur-3xl" />
+
+        <div className="relative">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                Conta principal
+              </p>
+
+              <p className="mt-2 text-sm font-bold text-slate-200">
+                {accountName}
+              </p>
+            </div>
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 backdrop-blur-md">
+              <CreditCard className="h-5 w-5 text-blue-200" />
+            </div>
+          </div>
+
+          <div className="mt-8">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+              Saldo disponível
+            </p>
+
+            <p className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+              24 680,35 MZN
+            </p>
+          </div>
+
+          <div className="mt-7 flex flex-wrap items-center gap-3">
+            <span className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-md px-3 py-2 text-xs font-bold text-slate-300">
+              Conta {PAYMENT.accountMasked}
+            </span>
+
+            <span className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-md px-3 py-2 text-xs font-bold text-slate-300">
+              Conta à ordem
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PaymentSummaryCard({ onOpen, onInspect }) {
+  return (
+    <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-5 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+            <Banknote className="h-5 w-5" />
+          </div>
+
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+              Operação pendente
+            </p>
+
+            <h2 className="mt-1 text-base font-black text-slate-950 sm:text-lg">
+              {PAYMENT.description}
+            </h2>
+          </div>
+        </div>
+
+        <StatusPill tone="amber">
+          <Clock3 className="h-3 w-3" />
+          Pendente
+        </StatusPill>
+      </div>
+
+      <div className="grid gap-0 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="border-b border-slate-100 p-5 sm:border-r">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+            Montante
+          </p>
+          <p className="mt-2 text-xl font-black text-slate-950">
+            {PAYMENT.amount}
+          </p>
+        </div>
+
+        <div className="border-b border-slate-100 p-5 lg:border-r">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+            Beneficiário
+          </p>
+          <p className="mt-2 text-sm font-black text-slate-800">
+            {PAYMENT.beneficiaryOriginal}
+          </p>
+        </div>
+
+        <div className="border-b border-slate-100 p-5 sm:border-r lg:border-b-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+            Referência
+          </p>
+          <p className="mt-2 font-mono text-sm font-black text-slate-800">
+            {PAYMENT.reference}
+          </p>
+        </div>
+
+        <div className="p-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+            Prazo indicado
+          </p>
+          <p className="mt-2 text-sm font-black text-slate-800">
+            {PAYMENT.deadline}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-slate-100 p-5 sm:flex-row sm:justify-end sm:p-6">
+        <button
+          type="button"
+          onClick={onInspect}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+        >
+          <Eye className="h-4 w-4" />
+          Consultar dados
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+        >
+          Abrir operação
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function TransactionList({ onOpen }) {
+  const transactions = [
+    {
+      title: "Pagamento pendente",
+      subtitle: "Serviços Online MZ",
+      amount: "- 8 450,00 MZN",
+      status: "Pendente",
+      active: true,
+    },
+    {
+      title: "Propina académica",
+      subtitle: "14 de Setembro",
+      amount: "- 5 200,00 MZN",
+      status: "Concluído",
+      active: false,
+    },
+    {
+      title: "Transferência recebida",
+      subtitle: "Movimento recente",
+      amount: "+ 12 000,00 MZN",
+      status: "Concluído",
+      active: false,
+    },
+  ];
+
+  return (
+    <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-5 sm:px-6">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+            Actividade
+          </p>
+          <h2 className="mt-1 text-base font-black text-slate-950">
+            Últimas operações
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            registerAction({
+              action: "view_all_transactions",
+              nextState: STATES.PAYMENT_HOME,
+              interactionType: "navigation",
+            })
+          }
+          className="text-xs font-black text-blue-600 hover:text-blue-700"
+        >
+          Ver todas
+        </button>
+      </div>
+
+      <div>
+        {transactions.map((transaction, index) => (
+          <div
+            key={transaction.title}
+            className={`flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 ${
+              index !== transactions.length - 1
+                ? "border-b border-slate-100"
+                : ""
+            }`}
+          >
+            <div className="flex min-w-0 items-center gap-4">
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                  transaction.active
+                    ? "bg-amber-50 text-amber-600"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {transaction.active ? (
+                  <Clock3 className="h-4 w-4" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-slate-900">
+                  {transaction.title}
+                </p>
+
+                <p className="mt-1 truncate text-xs text-slate-400">
+                  {transaction.subtitle}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 sm:justify-end">
+              <div className="text-left sm:text-right">
+                <p
+                  className={`text-sm font-black ${
+                    transaction.amount.startsWith("+")
+                      ? "text-emerald-600"
+                      : "text-slate-900"
+                  }`}
+                >
+                  {transaction.amount}
+                </p>
+
+                <p className="mt-1 text-[10px] font-bold text-slate-400">
+                  {transaction.status}
+                </p>
+              </div>
+
+              {transaction.active && (
+                <button
+                  type="button"
+                  onClick={onOpen}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-blue-600"
+                  aria-label="Abrir operação"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DataRow({ label, value, mono = false, danger = false }) {
+  return (
+    <div className="flex items-start justify-between gap-5 border-b border-slate-100 py-4 last:border-b-0">
+      <span className="text-xs font-semibold text-slate-400">
+        {label}
+      </span>
+
+      <span
+        className={`max-w-[65%] text-right text-sm font-black ${
+          danger ? "text-amber-700" : "text-slate-800"
+        } ${mono ? "font-mono" : ""}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function SectionTitle({ eyebrow, title, description, icon: Icon }) {
+  return (
+    <div className="flex items-start gap-4">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+        <Icon className="h-5 w-5" />
+      </div>
+
+      <div className="min-w-0">
+        <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">
+          {eyebrow}
+        </p>
+
+        <h1 className="mt-1 text-2xl font-black tracking-[-0.025em] text-slate-950 sm:text-3xl">
+          {title}
+        </h1>
+
+        {description && (
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            {description}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PaymentDetailsView({
+  onBack,
+  onVerify,
+  onCancel,
+}) {
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow="Operação financeira"
+        title="Detalhes do pagamento"
+        description="Consulte a ordem de pagamento antes de a autorizar."
+        icon={FileCheck2}
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-5 sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                  Referência da operação
+                </p>
+                <p className="mt-1 font-mono text-sm font-black text-slate-900">
+                  {PAYMENT.reference}
+                </p>
+              </div>
+
+              <StatusPill tone="amber">
+                <Clock3 className="h-3 w-3" />
+                Pendente
+              </StatusPill>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-7">
+            <div className="rounded-[24px] bg-blue-700 p-6 text-white">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Valor da operação
+              </p>
+
+              <p className="mt-2 text-4xl font-black tracking-[-0.04em]">
+                {PAYMENT.amount}
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <span className="rounded-lg bg-white/10 backdrop-blur-md px-3 py-2 text-[11px] font-bold text-slate-300">
+                  {PAYMENT.description}
+                </span>
+
+                <span className="rounded-lg bg-white/10 backdrop-blur-md px-3 py-2 text-[11px] font-bold text-slate-300">
+                  {PAYMENT.channel}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <DataRow
+                label="Beneficiário indicado"
+                value={PAYMENT.beneficiaryOriginal}
+              />
+
+              <DataRow
+                label="Conta de origem"
+                value={PAYMENT.accountMasked}
+              />
+
+              <DataRow
+                label="Referência"
+                value={PAYMENT.reference}
+                mono
+              />
+
+              <DataRow
+                label="Data"
+                value={`${PAYMENT.date}, ${PAYMENT.time}`}
+              />
+
+              <DataRow
+                label="Prazo apresentado"
+                value={PAYMENT.deadline}
+              />
+            </div>
+          </div>
+        </section>
+
+        <aside className="space-y-4">
+          <section className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 sm:p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+
+              <div>
+                <p className="text-sm font-black text-amber-900">
+                  Verificação necessária
+                </p>
+
+                <p className="mt-2 text-xs leading-5 text-amber-800">
+                  A operação apresenta dados que devem ser confirmados antes
+                  da autorização.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+              Próximo passo
+            </p>
+
+            <p className="mt-2 text-sm font-black text-slate-900">
+              Confirmar os dados do beneficiário
+            </p>
+
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              A operação continuará para a etapa de verificação.
+            </p>
+
+            <button
+              type="button"
+              onClick={onVerify}
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+            >
+              Verificar beneficiário
+              <ArrowRight className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={onBack}
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar às operações
+            </button>
+
+            <button
+              type="button"
+              onClick={onCancel}
+              className="mt-3 w-full text-xs font-bold text-slate-400 transition hover:text-slate-700"
+            >
+              Cancelar operação
+            </button>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function BeneficiaryVerificationView({
+  expanded,
+  onExpand,
+  onContinue,
+  onBack,
+  onCancel,
+}) {
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow="Verificação"
+        title="Confirme o beneficiário"
+        description="A plataforma apresenta os dados associados à ordem de pagamento."
+        icon={Search}
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-5 py-5 sm:px-7">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                  Referência
+                </p>
+                <p className="mt-1 font-mono text-sm font-black text-slate-900">
+                  {PAYMENT.reference}
+                </p>
+              </div>
+
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                <UserRound className="h-5 w-5" />
+              </span>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-7">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                  Beneficiário apresentado
+                </p>
+
+                <p className="mt-3 text-lg font-black text-slate-950">
+                  {PAYMENT.beneficiaryOriginal}
+                </p>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Entidade indicada na ordem recebida.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                  Valor
+                </p>
+
+                <p className="mt-3 text-lg font-black text-slate-950">
+                  {PAYMENT.amount}
+                </p>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Montante solicitado para a operação.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <Info className="h-4 w-4" />
+                </div>
+
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    Dados da operação
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    A consulta permite visualizar informações adicionais
+                    antes de continuar.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onExpand}
+                className="mt-4 inline-flex items-center gap-2 text-xs font-black text-blue-600 hover:text-blue-700"
+              >
+                {expanded ? "Ocultar informações" : "Consultar informações"}
+                {expanded ? (
+                  <X className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+              </button>
+
+              {expanded && (
+                <div className="mt-5 border-t border-slate-100 pt-5">
+                  <DataRow
+                    label="Descrição"
+                    value={PAYMENT.description}
+                  />
+                  <DataRow
+                    label="Canal"
+                    value={PAYMENT.channel}
+                  />
+                  <DataRow
+                    label="Data de criação"
+                    value={`${PAYMENT.date}, ${PAYMENT.time}`}
+                  />
+                  <DataRow
+                    label="Conta de débito"
+                    value={PAYMENT.accountMasked}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <aside className="space-y-4">
+          <section className="rounded-[28px] border border-blue-100 bg-blue-50 p-5 sm:p-6">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+
+              <div>
+                <p className="text-sm font-black text-blue-950">
+                  Validação da operação
+                </p>
+
+                <p className="mt-2 text-xs leading-5 text-blue-800">
+                  A próxima etapa apresenta uma alteração nos dados do
+                  beneficiário antes da confirmação.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <button
+              type="button"
+              onClick={onContinue}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+            >
+              Continuar verificação
+              <ArrowRight className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={onBack}
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
+            </button>
+
+            <button
+              type="button"
+              onClick={onCancel}
+              className="mt-3 w-full text-xs font-bold text-slate-400 hover:text-slate-700"
+            >
+              Cancelar operação
+            </button>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function BeneficiaryChangedView({
+  onContinue,
+  onReview,
+  onCancel,
+}) {
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow="Dados alterados"
+        title="O beneficiário apresentado mudou"
+        description="A operação apresenta uma informação diferente da que constava anteriormente."
+        icon={AlertTriangle}
+      />
+
+      <section className="overflow-hidden rounded-[30px] border border-amber-200 bg-white shadow-sm">
+        <div className="border-b border-amber-100 bg-amber-50 px-5 py-5 sm:px-7">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-700">
+                Alteração detectada
+              </p>
+              <p className="mt-1 text-sm font-black text-amber-950">
+                Compare os dados antes de continuar.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-0 md:grid-cols-2">
+          <div className="border-b border-slate-100 p-6 md:border-b-0 md:border-r sm:p-8">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+              Dados anteriores
+            </p>
+
+            <p className="mt-4 text-xl font-black text-slate-900">
+              {PAYMENT.beneficiaryOriginal}
+            </p>
+
+            <div className="mt-5 space-y-3">
+              <DataRow
+                label="Referência"
+                value={PAYMENT.reference}
+                mono
+              />
+
+              <DataRow
+                label="Valor"
+                value={PAYMENT.amount}
+              />
+            </div>
+          </div>
+
+          <div className="p-6 sm:p-8">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-600">
+              Dados actuais
+            </p>
+
+            <p className="mt-4 text-xl font-black text-amber-900">
+              {PAYMENT.beneficiaryChanged}
+            </p>
+
+            <div className="mt-5 space-y-3">
+              <DataRow
+                label="Referência"
+                value={PAYMENT.reference}
+                mono
+              />
+
+              <DataRow
+                label="Valor"
+                value={PAYMENT.amount}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-100 bg-slate-50 p-5 sm:p-7">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+
+              <p className="max-w-2xl text-xs leading-5 text-slate-600">
+                O valor e a referência permanecem iguais, mas o nome do
+                beneficiário apresentado para autorização é diferente.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={onReview}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+              >
+                Rever dados
+                <Eye className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onContinue}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-xs font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+              >
+                Ir para confirmação
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <button
+        type="button"
+        onClick={onCancel}
+        className="text-xs font-bold text-slate-400 hover:text-slate-700"
+      >
+        Cancelar operação
+      </button>
+    </div>
+  );
+}
+
+function ConfirmationView({
+  accountName,
+  accepted,
+  onAccepted,
+  onAuthorize,
+  onBack,
+  onCancel,
+}) {
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow="Confirmação"
+        title="Reveja a ordem de pagamento"
+        description="A operação está pronta para seguir para a etapa de autorização."
+        icon={FileCheck2}
+      />
+
+      <div className="mx-auto max-w-4xl">
+        <section className="rounded-[30px] border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-5 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Ordem de pagamento
+              </p>
+
+              <p className="mt-1 font-mono text-sm font-black text-slate-900">
+                {PAYMENT.reference}
+              </p>
+            </div>
+
+            <div className="text-left sm:text-right">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Total
+              </p>
+
+              <p className="mt-1 text-2xl font-black text-slate-950">
+                {PAYMENT.amount}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-0 md:grid-cols-2">
+            <div className="p-6 sm:p-8 md:border-r md:border-slate-100">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                Origem
+              </p>
+
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold text-slate-400">
+                  Titular
+                </p>
+                <p className="mt-1 text-sm font-black text-slate-900">
+                  {accountName}
+                </p>
+
+                <p className="mt-4 text-xs font-semibold text-slate-400">
+                  Conta
+                </p>
+                <p className="mt-1 font-mono text-sm font-black text-slate-900">
+                  {PAYMENT.accountMasked}
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 p-6 sm:p-8 md:border-t-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                Destino
+              </p>
+
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                <p className="text-xs font-semibold text-slate-400">
+                  Beneficiário
+                </p>
+
+                <p className="mt-1 text-sm font-black text-slate-900">
+                  {PAYMENT.beneficiaryChanged}
+                </p>
+
+                <p className="mt-4 text-xs font-semibold text-slate-400">
+                  Descrição
+                </p>
+
+                <p className="mt-1 text-sm font-black text-slate-900">
+                  {PAYMENT.description}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 p-6 sm:p-8">
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:bg-white">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={onAccepted}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+
+              <span>
+                <span className="block text-sm font-black text-slate-900">
+                  Confirmar os dados apresentados
+                </span>
+
+                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                  A operação seguirá para a etapa de autorização.
+                </span>
+              </span>
+            </label>
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={onBack}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Rever dados
+              </button>
+
+              <button
+                type="button"
+                onClick={onAuthorize}
+                disabled={!accepted}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Autorizar pagamento
+                <LockKeyhole className="h-4 w-4" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={onCancel}
+              className="mt-4 w-full text-xs font-bold text-slate-400 hover:text-slate-700"
+            >
+              Cancelar operação
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function AuthenticationView({
+  accountEmail,
+  code,
+  onCodeChange,
+  onSubmit,
+  onInspect,
+  inspectionOpen,
+  onCancel,
+}) {
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      <SectionTitle
+        eyebrow="Autorização"
+        title="Autorize a operação"
+        description="O sistema solicita uma confirmação adicional antes de processar o pagamento."
+        icon={Smartphone}
+      />
+
+      <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
+        <div className="bg-blue-700 px-6 py-7 text-white sm:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Operação
+              </p>
+
+              <p className="mt-1 font-mono text-sm font-black text-slate-200">
+                {PAYMENT.reference}
+              </p>
+            </div>
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-md">
+              <LockKeyhole className="h-5 w-5 text-blue-200" />
+            </div>
+          </div>
+
+          <div className="mt-7">
+            <p className="text-3xl font-black tracking-[-0.035em]">
+              {PAYMENT.amount}
+            </p>
+
+            <p className="mt-2 text-sm text-slate-400">
+              Para {PAYMENT.beneficiaryChanged}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-6 sm:p-8">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-start gap-3">
+              <Smartphone className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+
+              <div>
+                <p className="text-sm font-black text-slate-900">
+                  Código de autorização
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Um código de utilização única foi disponibilizado para
+                  confirmar esta operação.
+                </p>
+
+                {accountEmail && (
+                  <p className="mt-3 text-xs font-bold text-slate-600">
+                    Contacto associado: {accountEmail}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <form
+            onSubmit={onSubmit}
+            className="mt-6"
+          >
+            <label
+              htmlFor="phishing03-authorisation-code"
+              className="text-xs font-black text-slate-800"
+            >
+              Código
+            </label>
+
+            <input
+              id="phishing03-authorisation-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(event) => onCodeChange(event.target.value)}
+              placeholder="Introduza o código"
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 font-mono text-lg font-black tracking-[0.22em] text-slate-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+            />
+
+            <button
+              type="submit"
+              disabled={!code.trim()}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Confirmar autorização
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </form>
+
+          <button
+            type="button"
+            onClick={onInspect}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 px-5 py-3.5 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+          >
+            <Eye className="h-4 w-4" />
+            {inspectionOpen
+              ? "Ocultar dados da autorização"
+              : "Consultar dados da autorização"}
+          </button>
+
+          {inspectionOpen && (
+            <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">
+                Dados apresentados
+              </p>
+
+              <div className="mt-3 space-y-1">
+                <DataRow
+                  label="Operação"
+                  value={PAYMENT.reference}
+                  mono
+                />
+
+                <DataRow
+                  label="Valor"
+                  value={PAYMENT.amount}
+                />
+
+                <DataRow
+                  label="Beneficiário"
+                  value={PAYMENT.beneficiaryChanged}
+                />
+
+                <DataRow
+                  label="Código"
+                  value="Utilização única"
+                />
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={onCancel}
+            className="mt-5 w-full text-xs font-bold text-slate-400 hover:text-slate-700"
+          >
+            Não autorizar esta operação
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProcessingView() {
+  return (
+    <div className="mx-auto max-w-3xl">
+      <section className="rounded-[30px] border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-12">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+          <RefreshCw className="h-9 w-9 animate-spin" />
+        </div>
+
+        <p className="mt-7 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">
+          Processamento
+        </p>
+
+        <h1 className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950 sm:text-3xl">
+          A processar a operação
+        </h1>
+
+        <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-500">
+          O pedido foi recebido e está a ser encaminhado para o sistema de
+          pagamentos.
+        </p>
+
+        <div className="mx-auto mt-8 max-w-md rounded-2xl bg-slate-50 p-5 text-left">
+          <DataRow
+            label="Referência"
+            value={PAYMENT.reference}
+            mono
+          />
+          <DataRow
+            label="Montante"
+            value={PAYMENT.amount}
+          />
+          <DataRow
+            label="Estado"
+            value="Em processamento"
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ReceiptView({ onFinish }) {
+  return (
+    <div className="mx-auto max-w-3xl">
+      <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
+        <div className="bg-blue-700 p-8 text-white sm:p-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300">
+            <FileCheck2 className="h-7 w-7" />
+          </div>
+
+          <p className="mt-7 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+            Comprovativo
+          </p>
+
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.035em]">
+            Pedido de pagamento registado
+          </h1>
+
+          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">
+            O sistema recebeu a instrução e atribuiu uma referência à
+            operação.
+          </p>
+        </div>
+
+        <div className="p-6 sm:p-8">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                Referência
+              </p>
+              <p className="mt-2 font-mono text-lg font-black text-slate-900">
+                {PAYMENT.reference}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                Montante
+              </p>
+              <p className="mt-2 text-lg font-black text-slate-900">
+                {PAYMENT.amount}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                Beneficiário
+              </p>
+              <p className="mt-2 text-sm font-black text-slate-900">
+                {PAYMENT.beneficiaryChanged}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                Estado
+              </p>
+              <div className="mt-2">
+                <StatusPill tone="blue">
+                  Em análise
+                </StatusPill>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-slate-200 p-5">
+            <div className="flex items-start gap-3">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+
+              <p className="text-xs leading-5 text-slate-600">
+                A operação permanece associada à referência apresentada.
+                Consulte o histórico da conta para acompanhar alterações
+                posteriores.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onFinish}
+            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+          >
+            Continuar
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CancelFeedbackView({
+  onOfficialCheck,
+  onReturn,
+  onFinish,
+}) {
+  return (
+    <div className="mx-auto max-w-3xl">
+      <section className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-sm sm:p-10">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+          <ShieldCheck className="h-7 w-7" />
+        </div>
+
+        <p className="mt-7 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+          Estado da operação
+        </p>
+
+        <h1 className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950 sm:text-3xl">
+          A autorização não foi concluída
+        </h1>
+
+        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
+          A ordem permanece sem confirmação final. O percurso pode continuar
+          através da verificação oficial ou pode ser encerrado.
+        </p>
+
+        <div className="mt-7 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Operação
+            </p>
+            <p className="mt-2 font-mono text-sm font-black text-slate-800">
+              {PAYMENT.reference}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Autorização
+            </p>
+            <p className="mt-2 text-sm font-black text-slate-800">
+              Não concluída
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Código
+            </p>
+            <p className="mt-2 text-sm font-black text-slate-800">
+              Não armazenado
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-7 flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={onOfficialCheck}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+          >
+            Verificar pelo canal oficial
+            <ShieldCheck className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={onReturn}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3.5 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+          >
+            Rever operação
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={onFinish}
+          className="mt-4 w-full text-xs font-bold text-slate-400 hover:text-slate-700"
+        >
+          Encerrar esta experiência
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function OfficialCheckView({
+  checked,
+  onCheck,
+  onContinue,
+  onBack,
+}) {
+  return (
+    <div className="mx-auto max-w-3xl space-y-6">
+      <SectionTitle
+        eyebrow="Canal oficial"
+        title="Consultar a operação"
+        description="A consulta simula uma verificação iniciada directamente a partir do serviço financeiro."
+        icon={Landmark}
+      />
+
+      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+              <LockKeyhole className="h-5 w-5" />
+            </div>
+
+            <div>
+              <p className="text-sm font-black text-slate-900">
+                Consulta independente
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                A pesquisa é feita através do painel interno da conta.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <label
+            htmlFor="phishing03-reference"
+            className="text-xs font-black text-slate-800"
+          >
+            Referência da operação
+          </label>
+
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <input
+              id="phishing03-reference"
+              value={PAYMENT.reference}
+              readOnly
+              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-sm font-black text-slate-800 outline-none"
+            />
+
+            <button
+              type="button"
+              onClick={() =>
+                registerAction({
+                  action: "copy_reference",
+                  nextState: STATES.OFFICIAL_CHECK,
+                  interactionType: "utility",
+                  metadata: {
+                    reference_present: true,
+                  },
+                })
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700 hover:bg-slate-50"
+            >
+              <Copy className="h-4 w-4" />
+              Copiar
+            </button>
+          </div>
+        </div>
+
+        <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 hover:bg-slate-50">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={onCheck}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+          />
+
+          <span>
+            <span className="block text-sm font-black text-slate-900">
+              Consultar a operação no painel da conta
+            </span>
+
+            <span className="mt-1 block text-xs leading-5 text-slate-500">
+              A consulta não envia credenciais nem autoriza o pagamento.
+            </span>
+          </span>
+        </label>
+
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar
+          </button>
+
+          <button
+            type="button"
+            disabled={!checked}
+            onClick={onContinue}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Consultar operação
+            <Search className="h-4 w-4" />
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function OfficialResultView({
+  onReturn,
+  onFinish,
+}) {
+  return (
+    <div className="mx-auto max-w-3xl">
+      <section className="rounded-[30px] border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 p-7 sm:p-9">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+
+          <p className="mt-7 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">
+            Resultado da consulta
+          </p>
+
+          <h1 className="mt-2 text-2xl font-black tracking-[-0.03em] text-slate-950 sm:text-3xl">
+            A operação consta no histórico da conta
+          </h1>
+
+          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
+            A consulta independente apresentou a mesma referência da ordem
+            recebida.
+          </p>
+        </div>
+
+        <div className="p-7 sm:p-9">
+          <div className="rounded-2xl border border-slate-200 p-5">
+            <DataRow
+              label="Referência"
+              value={PAYMENT.reference}
+              mono
+            />
+            <DataRow
+              label="Montante"
+              value={PAYMENT.amount}
+            />
+            <DataRow
+              label="Estado"
+              value="Sem autorização final"
+            />
+            <DataRow
+              label="Beneficiário"
+              value={PAYMENT.beneficiaryChanged}
+              danger
+            />
+          </div>
+
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={onReturn}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3.5 text-sm font-black text-slate-700 hover:bg-slate-50"
+            >
+              Rever operação
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={onFinish}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700"
+            >
+              Encerrar experiência
+              <Check className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CompletedView({
+  duration,
+  onNext,
+  onEnd,
+  feedbackMode,
+}) {
+  if (feedbackMode === "positive") {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-xl shadow-slate-200/40">
+
+          <div className="bg-blue-700 px-7 py-9 text-white sm:px-10 sm:py-12">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/20 text-white">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+
+            <p className="mt-7 text-[10px] font-black uppercase tracking-[0.18em] text-blue-100">
+              Simulação 03 · Feedback de segurança
+            </p>
+
+            <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+              Boa decisão: experiência encerrada com segurança
+            </h1>
+
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100">
+              Você decidiu encerrar a experiência sem permitir que a operação
+              avançasse para uma nova etapa de risco.
+            </p>
+          </div>
+
+          <div className="space-y-5 p-7 sm:p-10">
+
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+              <p className="text-sm font-black text-blue-950">
+                Resultado da decisão
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-blue-800">
+                A experiência foi interrompida e não houve necessidade de
+                continuar a operação simulada.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                  Operação
+                </p>
+
+                <p className="mt-2 font-mono text-sm font-black text-slate-900">
+                  {PAYMENT.reference}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                  Montante
+                </p>
+
+                <p className="mt-2 text-sm font-black text-slate-900">
+                  {PAYMENT.amount}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                  Duração
+                </p>
+
+                <p className="mt-2 text-sm font-black text-slate-900">
+                  {duration}
+                </p>
+              </div>
+
+            </div>
+
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
+                Lição de segurança
+              </p>
+
+              <p className="mt-2 text-sm font-black leading-6 text-blue-950">
+                Quando uma operação financeira apresentar sinais inesperados,
+                interrompa o processo e confirme a informação através de um
+                canal oficial e independente.
+              </p>
+            </div>
+
+            <div className="grid gap-3 pt-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={onEnd}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 px-6 py-3.5 text-sm font-black text-blue-700 transition hover:bg-blue-50"
+              >
+                Encerrar simulação
+                <Check className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onNext}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+              >
+                Próxima simulação
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl">
+      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-xl shadow-slate-200/40">
+
+        <div className="bg-blue-700 px-7 py-9 text-white sm:px-10 sm:py-12">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-500/20 text-white">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+
+          <p className="mt-7 text-[10px] font-black uppercase tracking-[0.18em] text-blue-100">
+            Simulação 03 · Feedback de segurança
+          </p>
+
+          <h1 className="mt-2 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+            O seu dinheiro foi desviado
+          </h1>
+
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100">
+            A operação foi confirmada. Na simulação, os 8 450,00 MZN foram enviados para o beneficiário que havia sido alterado sem validação independente.
+          </p>
+        </div>
+
+        <div className="space-y-5 p-7 sm:p-10">
+
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <p className="text-sm font-black text-blue-950">
+              Consequência da decisão
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-blue-800">
+              O pagamento simulado de 8 450,00 MZN foi concluído com o beneficiário alterado de Serviços Online MZ para Serviços Digitais MZ. O valor saiu da conta de origem e foi enviado para o destinatário alterado.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
+    O que aconteceu
+  </p>
+
+  <p className="mt-2 text-sm leading-6 text-red-800">
+    Na simulação, os 8 450,00 MZN foram efectivamente encaminhados para o
+    beneficiário alterado. A confirmação da operação consumou o pagamento
+    antes de a alteração dos dados ser validada.
+  </p>
+</div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+              O que deveria ter feito
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-slate-700">
+              Interromper a operação, confirmar os dados através de um canal
+              oficial e independente e só continuar depois de validar a
+              autenticidade do pedido.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-700">
+              Lição de segurança
+            </p>
+
+            <p className="mt-2 text-sm font-black leading-6 text-blue-950">
+              Nunca autorize uma operação financeira apenas porque a interface,
+              a mensagem ou o contexto parecem legítimos.
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-blue-800">
+              O pagamento simulado de 8 450,00 MZN foi concluído com o beneficiário alterado de Serviços Online MZ para Serviços Digitais MZ. O valor saiu da conta de origem e foi enviado para o destinatário alterado.
+            </p>
+          </div>
+
+          <div className="grid gap-3 pt-2 sm:grid-cols-2">
+
+            <button
+              type="button"
+              onClick={onEnd}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 px-5 py-3.5 text-sm font-black text-blue-700 transition hover:bg-blue-50"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Concluir simulação
+            </button>
+
+            <button
+              type="button"
+              onClick={onNext}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+            >
+              Próxima simulação
+              <ArrowRight className="h-4 w-4" />
+            </button>
+
+          </div>
+
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export default function Phishing03Page() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const accountName =
+    user?.name ||
+    user?.full_name ||
+    user?.displayName ||
+    user?.username ||
+    "Titular da conta";
+
+  const accountEmail =
+    user?.email ||
+    user?.username ||
+    "";
+
+  const [state, setState] = useState(STATES.PAYMENT_HOME);
+  const [completionFeedback, setCompletionFeedback] = useState("negative");
+  const [senderInspection, setSenderInspection] = useState(false);
+  const [beneficiaryInspection, setBeneficiaryInspection] =
+    useState(false);
+  const [authorisationInspection, setAuthorisationInspection] =
+    useState(false);
+  const [officialChecked, setOfficialChecked] = useState(false);
+  const [authorisationCode, setAuthorisationCode] = useState("");
+  const [sessionStartedAt, setSessionStartedAt] = useState(Date.now());
+  const [duration, setDuration] = useState("0s");
+  const [mobileMenu, setMobileMenu] = useState(false);
+
+  const currentSession = useMemo(
+    () => getCurrentSimulation(),
+    [state]
+  );
+
+  useEffect(() => {
+    const session = createInitialSession();
+
+    if (session?.current_state) {
+      setState(session.current_state);
+    }
+
+    setSessionStartedAt(
+      session?.started_at
+        ? new Date(session.started_at).getTime()
+        : Date.now()
+    );
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setDuration(
+        formatDuration(
+          Date.now() - sessionStartedAt
+        )
+      );
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [sessionStartedAt]);
+
+  function transition({
+    action,
+    nextState,
+    interactionType = "interaction",
+    metadata = {},
+  }) {
+    registerAction({
+      action,
+      nextState,
+      interactionType,
+      metadata,
+    });
+
+    setState(nextState);
+    setMobileMenu(false);
+  }
+
+  function openPayment() {
+    transition({
+      action: "open_pending_payment",
+      nextState: STATES.PAYMENT_DETAILS,
+      interactionType: "navigation",
+      metadata: {
+        reference: PAYMENT.reference,
+        amount: PAYMENT.amountNumeric,
+      },
+    });
+  }
+
+  function inspectPaymentFromHome() {
+    transition({
+      action: "inspect_pending_payment",
+      nextState: STATES.PAYMENT_DETAILS,
+      interactionType: "inspection",
+      metadata: {
+        source: "payment_home",
+        reference: PAYMENT.reference,
+      },
+    });
+  }
+
+  function verifyBeneficiary() {
+    transition({
+      action: "open_beneficiary_verification",
+      nextState: STATES.BENEFICIARY_VERIFICATION,
+      interactionType: "inspection",
+      metadata: {
+        target: "beneficiary",
+      },
+    });
+  }
+
+  function continueBeneficiaryVerification() {
+    transition({
+      action: "continue_beneficiary_verification",
+      nextState: STATES.BENEFICIARY_CHANGED,
+      interactionType: "verification",
+      metadata: {
+        beneficiary_comparison: true,
+      },
+    });
+  }
+
+  function openBeneficiaryInspection() {
+    transition({
+      action: beneficiaryInspection
+        ? "collapse_beneficiary_data"
+        : "expand_beneficiary_data",
+      nextState: STATES.BENEFICIARY_VERIFICATION,
+      interactionType: "inspection",
+      metadata: {
+        target: "payment_data",
+      },
+    });
+
+    setBeneficiaryInspection((value) => !value);
+  }
+
+  function goToConfirmation() {
+    transition({
+      action: "proceed_to_payment_confirmation",
+      nextState: STATES.PAYMENT_CONFIRMATION,
+      interactionType: "navigation",
+      metadata: {
+        beneficiary: PAYMENT.beneficiaryChanged,
+        amount: PAYMENT.amountNumeric,
+      },
+    });
+  }
+
+  function goBackToPaymentDetails() {
+    transition({
+      action: "return_to_payment_details",
+      nextState: STATES.PAYMENT_DETAILS,
+      interactionType: "navigation",
+    });
+  }
+
+  function goBackToBeneficiaryVerification() {
+    transition({
+      action: "return_to_beneficiary_verification",
+      nextState: STATES.BENEFICIARY_VERIFICATION,
+      interactionType: "navigation",
+    });
+  }
+
+  function openAuthorisation() {
+    transition({
+      action: "open_payment_authorisation",
+      nextState: STATES.PAYMENT_AUTHENTICATION,
+      interactionType: "authentication",
+      metadata: {
+        authentication_required: true,
+      },
+    });
+  }
+
+  function submitAuthorisation(event) {
+    event.preventDefault();
+
+    if (!authorisationCode.trim()) {
+      return;
+    }
+
+    transition({
+      action: "submit_authorisation_code",
+      nextState: STATES.PAYMENT_PROCESSING,
+      interactionType: "credentials",
+      metadata: {
+        authorisation_code_entered: true,
+        authorisation_code_content: "[REDACTED]",
+        content_stored: false,
+      },
+    });
+
+    setAuthorisationCode("");
+
+    window.setTimeout(() => {
+      transition({
+        action: "payment_processing_completed",
+        nextState: STATES.PAYMENT_RECEIPT,
+        interactionType: "system",
+        metadata: {
+          reference: PAYMENT.reference,
+          result: "pending_analysis",
+        },
+      });
+    }, 1800);
+  }
+
+  function cancelOperation(sourceState) {
+    transition({
+      action: "cancel_payment_operation",
+      nextState: STATES.CANCEL_FEEDBACK,
+      interactionType: "cancellation",
+      metadata: {
+        source_state: sourceState,
+        authorisation_code_entered:
+          Boolean(authorisationCode),
+      },
+    });
+
+    setAuthorisationCode("");
+  }
+
+  function openOfficialCheck() {
+    transition({
+      action: "open_official_verification",
+      nextState: STATES.OFFICIAL_CHECK,
+      interactionType: "verification",
+      metadata: {
+        method: "account_dashboard",
+      },
+    });
+  }
+
+  function completeOfficialCheck() {
+    transition({
+      action: "complete_official_verification",
+      nextState: STATES.OFFICIAL_RESULT,
+      interactionType: "verification",
+      metadata: {
+        reference: PAYMENT.reference,
+        independent_channel: true,
+      },
+    });
+  }
+
+  function finishScenario(feedback = "negative") {
+    setCompletionFeedback(
+      feedback === "positive" ? "positive" : "negative"
+    );
+
+    registerAction({
+      action: "complete_simulation",
+      nextState: STATES.COMPLETED,
+      interactionType: "lifecycle",
+      metadata: {
+        reference: PAYMENT.reference,
+      },
+    });
+
+    completeSimulation();
+    setState(STATES.COMPLETED);
+  }
+
+  function nextSimulation() {
+    registerAction({
+      action: "continue_to_simulation_04",
+      nextState: "phishing-04",
+      interactionType: "navigation",
+      metadata: {
+        destination: "/student/simulacoes/phishing/04",
+      },
+    });
+
+    navigate("/student/simulacoes/phishing/04");
+  }
+
+  function endSimulation() {
+    registerAction({
+      action: "return_to_simulations",
+      nextState: "simulations",
+      interactionType: "navigation",
+      metadata: {
+        destination: "/student/simulacoes",
+      },
+    });
+
+    navigate("/student/simulacoes");
+  }
+
+  function renderState() {
+    switch (state) {
+      case STATES.PAYMENT_DETAILS:
+        return (
+          <PaymentDetailsView
+            onBack={() =>
+              transition({
+                action: "return_to_payment_home",
+                nextState: STATES.PAYMENT_HOME,
+                interactionType: "navigation",
+              })
+            }
+            onVerify={verifyBeneficiary}
+            onCancel={() =>
+              cancelOperation(STATES.PAYMENT_DETAILS)
+            }
+          />
+        );
+
+      case STATES.BENEFICIARY_VERIFICATION:
+        return (
+          <BeneficiaryVerificationView
+            expanded={beneficiaryInspection}
+            onExpand={openBeneficiaryInspection}
+            onContinue={continueBeneficiaryVerification}
+            onBack={() =>
+              transition({
+                action: "return_to_payment_details",
+                nextState: STATES.PAYMENT_DETAILS,
+                interactionType: "navigation",
+              })
+            }
+            onCancel={() =>
+              cancelOperation(STATES.BENEFICIARY_VERIFICATION)
+            }
+          />
+        );
+
+      case STATES.BENEFICIARY_CHANGED:
+        return (
+          <BeneficiaryChangedView
+            onContinue={goToConfirmation}
+            onReview={goBackToBeneficiaryVerification}
+            onCancel={() =>
+              cancelOperation(STATES.BENEFICIARY_CHANGED)
+            }
+          />
+        );
+
+      case STATES.PAYMENT_CONFIRMATION:
+        return (
+          <ConfirmationView
+            accountName={accountName}
+            accepted={senderInspection}
+            onAccepted={() =>
+              setSenderInspection((value) => {
+                registerAction({
+                  action: value
+                    ? "uncheck_payment_confirmation"
+                    : "check_payment_confirmation",
+                  nextState: STATES.PAYMENT_CONFIRMATION,
+                  interactionType: "form",
+                  metadata: {
+                    confirmation_checked: !value,
+                  },
+                });
+
+                return !value;
+              })
+            }
+            onAuthorize={openAuthorisation}
+            onBack={goBackToBeneficiaryVerification}
+            onCancel={() =>
+              cancelOperation(STATES.PAYMENT_CONFIRMATION)
+            }
+          />
+        );
+
+      case STATES.PAYMENT_AUTHENTICATION:
+        return (
+          <AuthenticationView
+            accountEmail={accountEmail}
+            code={authorisationCode}
+            onCodeChange={setAuthorisationCode}
+            onSubmit={submitAuthorisation}
+            onInspect={() => {
+              transition({
+                action: authorisationInspection
+                  ? "collapse_authorisation_details"
+                  : "expand_authorisation_details",
+                nextState: STATES.PAYMENT_AUTHENTICATION,
+                interactionType: "inspection",
+                metadata: {
+                  target: "authorisation_details",
+                },
+              });
+
+              setAuthorisationInspection(
+                (value) => !value
+              );
+            }}
+            inspectionOpen={authorisationInspection}
+            onCancel={() =>
+              cancelOperation(STATES.PAYMENT_AUTHENTICATION)
+            }
+          />
+        );
+
+      case STATES.PAYMENT_PROCESSING:
+        return <ProcessingView />;
+
+      case STATES.PAYMENT_RECEIPT:
+        return (
+          <ReceiptView
+            onFinish={() => finishScenario("negative")}
+          />
+        );
+
+      case STATES.CANCEL_FEEDBACK:
+        return (
+          <CancelFeedbackView
+            onOfficialCheck={openOfficialCheck}
+            onReturn={() =>
+              transition({
+                action: "return_to_payment_after_cancellation",
+                nextState: STATES.PAYMENT_DETAILS,
+                interactionType: "navigation",
+              })
+            }
+            onFinish={() => finishScenario("positive")}
+          />
+        );
+
+      case STATES.OFFICIAL_CHECK:
+        return (
+          <OfficialCheckView
+            checked={officialChecked}
+            onCheck={() =>
+              setOfficialChecked((value) => {
+                registerAction({
+                  action: value
+                    ? "uncheck_official_verification"
+                    : "check_official_verification",
+                  nextState: STATES.OFFICIAL_CHECK,
+                  interactionType: "form",
+                  metadata: {
+                    verification_checked: !value,
+                  },
+                });
+
+                return !value;
+              })
+            }
+            onContinue={completeOfficialCheck}
+            onBack={() =>
+              transition({
+                action: "return_from_official_check",
+                nextState: STATES.CANCEL_FEEDBACK,
+                interactionType: "navigation",
+              })
+            }
+          />
+        );
+
+      case STATES.OFFICIAL_RESULT:
+        return (
+          <OfficialResultView
+            onReturn={() =>
+              transition({
+                action: "return_to_payment_details_after_check",
+                nextState: STATES.PAYMENT_DETAILS,
+                interactionType: "navigation",
+              })
+            }
+            onFinish={() => finishScenario("positive")}
+          />
+        );
+
+      case STATES.COMPLETED:
+        return (
+          <CompletedView
+            duration={duration}
+            onNext={nextSimulation}
+            onEnd={endSimulation}
+            feedbackMode={completionFeedback}
+          />
+        );
+
+      case STATES.PAYMENT_HOME:
+      default:
+        return (
+          <div className="space-y-6">
+            <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
+              <SectionTitle
+                eyebrow="Área financeira"
+                title="Operações"
+                description="Consulte e acompanhe as operações associadas à sua conta."
+                icon={CircleDollarSign}
+              />
+
+              <div className="hidden shrink-0 sm:block">
+                <StatusPill tone="blue">
+                  Sessão activa
+                </StatusPill>
+              </div>
+            </div>
+
+            <BalanceCard accountName={accountName} />
+
+            <PaymentSummaryCard
+              onOpen={openPayment}
+              onInspect={inspectPaymentFromHome}
+            />
+
+            <TransactionList onOpen={openPayment} />
+          </div>
+        );
+    }
+  }
+
+  const showMainNavigation = ![
+    STATES.COMPLETED,
+    STATES.PAYMENT_PROCESSING,
+  ].includes(state);
+
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      <MobileHeader
+        onBack={() => navigate(-1)}
+        onMenu={() => setMobileMenu((value) => !value)}
+      />
+
+      {mobileMenu && (
+        <div className="border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
+          <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
+              <UserRound className="h-4 w-4" />
+            </div>
+
+            <div className="min-w-0">
+              <p className="truncate text-xs font-black text-slate-900">
+                {accountName}
+              </p>
+              <p className="truncate text-[10px] text-slate-400">
+                {accountEmail || "Conta autenticada"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex min-h-[calc(100vh-4rem)] lg:min-h-screen">
+        <AccountRail
+          accountName={accountName}
+          accountEmail={accountEmail}
+          active={state === STATES.PAYMENT_HOME}
+          onHome={() =>
+            transition({
+              action: "return_to_operations",
+              nextState: STATES.PAYMENT_HOME,
+              interactionType: "navigation",
+            })
+          }
+        />
+
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto max-w-[1440px] px-4 py-5 sm:px-6 sm:py-7 xl:px-8">
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                <span>Simulações</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span>Phishing</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+                <span className="text-blue-600">
+                  03 · Pagamento
+                </span>
+              </div>
+
+              {showMainNavigation && (
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50 sm:inline-flex"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Voltar
+                </button>
+              )}
+            </div>
+
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-black text-white">
+                  03
+                </span>
+
+                <span className="text-xs font-bold text-slate-500">
+                  {SIMULATION.title}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <StatusPill tone="slate">
+                  <Clock3 className="h-3 w-3" />
+                  {duration}
+                </StatusPill>
+
+                {currentSession?.sequence ? (
+                  <StatusPill tone="slate">
+                    Acções {currentSession.sequence}
+                  </StatusPill>
+                ) : null}
+              </div>
+            </div>
+
+            {renderState()}
+          </div>
+        </main>
+      </div>
+
+      {state !== STATES.COMPLETED && state !== STATES.PAYMENT_PROCESSING && (
+        <div className="fixed bottom-4 right-4 z-30 hidden sm:block">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-xl shadow-slate-300/30">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+              <MoreHorizontal className="h-4 w-4" />
+            </span>
+
+            <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Percurso registado
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

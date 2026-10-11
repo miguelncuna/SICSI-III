@@ -1,0 +1,1108 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  Download,
+  FileSearch,
+  FileWarning,
+  Flag,
+  Globe2,
+  Mail,
+  MessageSquareWarning,
+  Shield,
+  ShieldAlert,
+  UserRound,
+  XCircle,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../../../context/AuthContext";
+import {
+  completeSimulation,
+  getCurrentSimulation,
+  registerAction,
+  startSimulation,
+} from "../engine/simulationEngine";
+import { clearSessionEvents } from "../engine/simulationTelemetry";
+import { completeSimulationSession } from "../engine/simulationSession";
+import { jsPDF } from "jspdf";
+
+const SIMULATION = {
+  area: "phishing",
+  id: "phishing-05",
+  number: 5,
+  title: "Identidade digital clonada",
+};
+
+const STATES = {
+  MESSAGE: "clone_message",
+  DETAILS: "clone_message_details",
+  PROFILE: "clone_profile",
+  CONVERSATION: "clone_conversation",
+  VERIFICATION: "clone_independent_verification",
+  LINK: "clone_phishing_link",
+  PHISHING_PAGE: "clone_phishing_page",
+  FEEDBACK: "clone_decision_feedback",
+  ATTACK_CHAIN: "clone_attack_chain",
+  RESPONSE: "clone_response",
+  RESPONSE_FEEDBACK: "clone_response_feedback",
+
+};
+
+const FEEDBACK_COPY = {
+  safe: {
+    label: "DECISÃO SEGURA",
+    tone: "emerald",
+    icon: CheckCircle2,
+  },
+  risk: {
+    label: "DECISÃO DE RISCO",
+    tone: "red",
+    icon: AlertTriangle,
+  },
+};
+
+function getAccountEmail(user) {
+  return user?.email || user?.username || user?.login || "estudante@sicsi.edu";
+}
+
+function getAccountName(user) {
+  return (
+    user?.name ||
+    user?.full_name ||
+    user?.fullName ||
+    user?.displayName ||
+    user?.username ||
+    (user?.email ? String(user.email).split("@")[0] : "") ||
+    "Titular da conta"
+  );
+}
+
+function getIdentityHandle(name) {
+  const normalized = String(name || "titular.da.conta")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.|\.$/g, "")
+    .replace(/\.{2,}/g, ".");
+  return `@${normalized || "titular.da.conta"}`;
+}
+
+function formatDuration(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function Shell({ children, title = "Phishing 05", onBack, subtitle }) {
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                aria-label="Voltar"
+              >
+                <ArrowLeft size={17} />
+              </button>
+            ) : null}
+            <div className="min-w-0">
+              <div className="text-sm font-black tracking-tight text-blue-800">SICSI</div>
+              <div className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                {subtitle || title}
+              </div>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 sm:flex">
+            <div className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[10px] font-black text-blue-700">
+              Phishing 05 / 05
+            </div>
+          </div>
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
+
+function PrimaryButton({ children, onClick, icon: Icon = ArrowRight, variant = "primary", className = "" }) {
+  const variants = {
+    primary: "bg-blue-700 text-white hover:bg-blue-800 shadow-sm",
+    secondary: "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+    danger: "border border-red-200 bg-white text-red-700 hover:bg-red-50",
+    success: "border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50",
+    dark: "bg-slate-900 text-white hover:bg-slate-800",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black transition ${variants[variant]} ${className}`}
+    >
+      {Icon ? <Icon size={17} /> : null}
+      {children}
+    </button>
+  );
+}
+
+function InfoChip({ label, value, tone = "slate" }) {
+  const toneClasses = {
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+    blue: "border-blue-100 bg-blue-50 text-blue-700",
+    red: "border-red-100 bg-red-50 text-red-700",
+    emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+  };
+
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${toneClasses[tone]}`}>
+      <div className="text-[9px] font-black uppercase tracking-[0.12em] opacity-70">{label}</div>
+      <div className="mt-1 text-xs font-black">{value}</div>
+    </div>
+  );
+}
+
+function MessageView({ account, accountName, onDetails, onProfile, onOpenLink, onReport }) {
+  return (
+    <Shell title="Caixa de entrada" subtitle="Mensagem recebida">
+      <main className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-10">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 md:px-7">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                <Mail size={19} />
+              </div>
+              <div>
+                <div className="text-sm font-black text-slate-800">Caixa de entrada</div>
+                <div className="text-[10px] font-semibold text-slate-400">1 nova comunicação</div>
+              </div>
+            </div>
+            <div className="text-[10px] font-bold text-slate-400">há 4 min</div>
+          </div>
+
+          <div className="grid gap-0 md:grid-cols-[0.78fr_1.22fr]">
+            <div className="border-b border-slate-100 bg-slate-50 p-5 md:border-b-0 md:border-r md:p-7">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-blue-700 shadow-sm">
+                  <UserRound size={21} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-slate-800">Secretaria Académica</div>
+                  <div className="truncate text-xs text-slate-500">secretaria@universidade-suporte.com</div>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-3">
+                <InfoChip label="Destinatário" value={account} />
+                <InfoChip label="Assunto" value="Ação necessária sobre a sua identidade digital" tone="blue" />
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-start gap-3">
+                  <ShieldAlert className="mt-0.5 shrink-0 text-blue-700" size={17} />
+                  <div>
+                    <div className="text-xs font-black text-slate-800">Mensagem prioritária</div>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Foi registado um contacto associado ao seu nome. Verifique os detalhes antes de responder.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 md:p-7">
+              <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Comunicação</div>
+              <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 md:text-3xl">
+                Alguém está a utilizar uma identidade semelhante à sua
+              </h1>
+              <p className="mt-4 text-sm leading-7 text-slate-600">
+                Recebemos uma solicitação associada ao seu nome. Uma pessoa com quem costuma comunicar pergunta se foi você quem enviou um documento e pede uma confirmação rápida.
+              </p>
+
+              <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+                <div className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-700">Solicitação recebida</div>
+                <p className="mt-2 text-sm font-bold leading-6 text-slate-800">
+                  “Preciso daquele documento ainda hoje. Confirmas que foste tu que o enviaste?”
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <InfoChip label="Remetente aparente" value={accountName} />
+                  <InfoChip label="Momento" value="07:42" />
+                </div>
+              </div>
+
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                <PrimaryButton icon={FileSearch} onClick={onDetails} variant="secondary">Ver detalhes da mensagem</PrimaryButton>
+                <PrimaryButton icon={UserRound} onClick={onProfile} variant="secondary">Ver perfil do remetente</PrimaryButton>
+                <PrimaryButton icon={ArrowRight} onClick={onOpenLink}>Abrir ligação da mensagem</PrimaryButton>
+                <PrimaryButton icon={Flag} onClick={onReport} variant="success">Denunciar comunicação</PrimaryButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function DetailsView({ accountName, clonedEmail, replyEmail, onBack, onProfile, onConversation, onLink, onReport }) {
+  return (
+    <Shell title="Detalhes da mensagem" onBack={onBack}>
+      <main className="mx-auto max-w-4xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-100 p-6 md:p-8">
+            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Metadados</div>
+            <h1 className="mt-2 text-2xl font-black text-slate-900">Detalhes da comunicação</h1>
+            <p className="mt-3 text-sm leading-6 text-slate-500">Analise a origem e o contexto antes de responder.</p>
+          </div>
+
+          <div className="grid gap-4 p-6 md:grid-cols-2 md:p-8">
+            <InfoChip label="De" value={`${accountName} <${clonedEmail}>`} />
+            <InfoChip label="Responder para" value={replyEmail} tone="red" />
+            <InfoChip label="Assunto" value="Confirmação de documento urgente" />
+            <InfoChip label="Ligação" value="https://portal-sicsi-security.com/verify" tone="red" />
+          </div>
+
+          <div className="mx-6 mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 md:mx-8 md:mb-8">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-700" />
+              <div>
+                <div className="text-xs font-black text-amber-800">Contexto</div>
+                <p className="mt-2 text-xs leading-5 text-amber-900">
+                  O endereço de resposta é diferente do domínio institucional esperado e a mensagem introduz urgência para justificar uma ação rápida.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-100 p-6 sm:flex-row sm:flex-wrap sm:justify-end md:p-8">
+            <PrimaryButton icon={ArrowLeft} onClick={onBack} variant="secondary">Voltar</PrimaryButton>
+            <PrimaryButton icon={UserRound} onClick={onProfile} variant="secondary">Ver perfil</PrimaryButton>
+            <PrimaryButton icon={MessageSquareWarning} onClick={onConversation} variant="secondary">Ver conversa</PrimaryButton>
+            <PrimaryButton icon={Globe2} onClick={onLink} variant="danger">Abrir ligação</PrimaryButton>
+            <PrimaryButton icon={Flag} onClick={onReport} variant="success">Denunciar</PrimaryButton>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function ProfileView({ accountName, identityHandle, onBack, onVerify, onConversation, onReport, onLink }) {
+  return (
+    <Shell title="Perfil do remetente" onBack={onBack}>
+      <main className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12">
+        <div className="grid overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl md:grid-cols-[0.9fr_1.1fr]">
+          <div className="bg-gradient-to-br from-blue-950 via-blue-900 to-blue-700 p-7 text-white md:p-9">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
+              <UserRound size={26} />
+            </div>
+            <div className="mt-6 text-[10px] font-black uppercase tracking-[0.16em] text-blue-100">Perfil apresentado</div>
+            <h1 className="mt-2 text-2xl font-black">{accountName}</h1>
+            <p className="mt-2 break-all text-xs text-blue-100">{identityHandle}_</p>
+
+            <div className="mt-8 rounded-2xl border border-white/10 bg-white/10 p-4">
+              <div className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-100">Conta oficial conhecida</div>
+              <div className="mt-2 text-sm font-black">{identityHandle}</div>
+            </div>
+          </div>
+
+          <div className="p-7 md:p-9">
+            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Comparação</div>
+            <h2 className="mt-2 text-xl font-black text-slate-900">Elementos visuais não bastam para validar uma identidade</h2>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <InfoChip label="Nome" value="Semelhante" tone="blue" />
+              <InfoChip label="Fotografia" value="Semelhante" tone="blue" />
+              <InfoChip label="Identificador" value="Diferente" tone="red" />
+              <InfoChip label="Data da conta" value="Criada hoje" tone="red" />
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-red-100 bg-red-50 p-5">
+              <div className="flex items-start gap-3">
+                <ShieldAlert size={18} className="mt-0.5 shrink-0 text-red-700" />
+                <div>
+                  <div className="text-xs font-black text-red-800">Sinais relevantes</div>
+                  <p className="mt-2 text-xs leading-5 text-red-900">
+                    Nome e fotografia podem ser copiados. O identificador e a data de criação são sinais mais úteis para confirmar se o perfil é realmente o conhecido.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              <PrimaryButton icon={CheckCircle2} onClick={onVerify} variant="success">Confirmar por outro canal</PrimaryButton>
+              <PrimaryButton icon={MessageSquareWarning} onClick={onConversation} variant="secondary">Continuar conversa</PrimaryButton>
+              <PrimaryButton icon={Globe2} onClick={onLink} variant="danger">Abrir ligação recebida</PrimaryButton>
+              <PrimaryButton icon={Flag} onClick={onReport} variant="success">Denunciar perfil</PrimaryButton>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function ConversationView({ accountName, onBack, onVerify, onSend, onLink, onReport }) {
+  return (
+    <Shell title="Conversa" onBack={onBack}>
+      <main className="mx-auto max-w-3xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-100 p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                <MessageSquareWarning size={20} />
+              </div>
+              <div>
+                <div className="text-sm font-black text-slate-800">{accountName}</div>
+                <div className="text-[10px] font-semibold text-slate-400">online · perfil não verificado</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 p-6 md:p-8">
+            <div className="mr-10 rounded-2xl rounded-tl-md bg-slate-100 p-4">
+              <div className="text-[10px] font-black text-slate-400">07:42</div>
+              <p className="mt-2 text-sm leading-6 text-slate-700">Preciso daquele documento ainda hoje. Confirmas que foste tu que o enviaste?</p>
+            </div>
+            <div className="ml-10 rounded-2xl rounded-tr-md bg-blue-50 p-4">
+              <div className="text-[10px] font-black text-blue-500">Tu</div>
+              <p className="mt-2 text-sm leading-6 text-slate-700">O pedido parece urgente. Posso enviar por aqui?</p>
+            </div>
+            <div className="mr-10 rounded-2xl rounded-tl-md bg-slate-100 p-4">
+              <div className="text-[10px] font-black text-slate-400">07:43</div>
+              <p className="mt-2 text-sm leading-6 text-slate-700">Sim. Para facilitar, valida primeiro neste link e depois envia o documento.</p>
+              <div className="mt-3 break-all rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-800">
+                portal-sicsi-security.com/verify
+              </div>
+            </div>
+
+            <div className="pt-3 grid gap-3 sm:grid-cols-2">
+              <PrimaryButton icon={CheckCircle2} onClick={onVerify} variant="success">Confirmar identidade por outro canal</PrimaryButton>
+              <PrimaryButton icon={ArrowRight} onClick={onSend}>Enviar o documento</PrimaryButton>
+              <PrimaryButton icon={Globe2} onClick={onLink} variant="danger">Abrir o link</PrimaryButton>
+              <PrimaryButton icon={Flag} onClick={onReport} variant="success">Denunciar a conta</PrimaryButton>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function VerificationView({ onBack, onConfirm, onCancel }) {
+  return (
+    <Shell title="Verificação independente" onBack={onBack}>
+      <main className="mx-auto max-w-2xl px-4 py-10 md:px-8 md:py-16">
+        <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-xl md:p-9">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+            <Globe2 size={22} />
+          </div>
+          <div className="mt-6 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Canal independente</div>
+          <h1 className="mt-2 text-2xl font-black text-slate-900">Confirme a identidade por um canal conhecido</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-500">O contacto conhecido responde fora do perfil apresentado na mensagem.</p>
+
+          <div className="mt-7 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5">
+            <div className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-700">Contacto conhecido</div>
+            <div className="mt-2 text-sm font-black text-emerald-950">João Matola · contacto institucional</div>
+            <p className="mt-2 text-xs leading-5 text-emerald-900">“Não fui eu quem pediu o documento. Há outro perfil a utilizar o mesmo nome.”</p>
+          </div>
+
+          <div className="mt-7 grid gap-3 sm:grid-cols-2">
+            <PrimaryButton icon={CheckCircle2} onClick={onConfirm} variant="success">Confirmar a identidade</PrimaryButton>
+            <PrimaryButton icon={XCircle} onClick={onCancel} variant="secondary">Cancelar verificação</PrimaryButton>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function LinkView({ onBack, onOpen }) {
+  return (
+    <Shell title="Pré-visualização da ligação" onBack={onBack}>
+      <main className="mx-auto max-w-3xl px-4 py-10 md:px-8 md:py-14">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-100 p-6 md:p-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-700">
+                <Globe2 size={22} />
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Ligação externa</div>
+                <h1 className="mt-1 text-xl font-black text-slate-900">portal-sicsi-security.com</h1>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 md:p-8">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoChip label="Domínio institucional" value="sicsi.edu" tone="blue" />
+              <InfoChip label="Domínio apresentado" value="sicsi-security.com" tone="red" />
+              <InfoChip label="Certificado simulado" value="Não validado" tone="red" />
+              <InfoChip label="Origem" value="Mensagem externa" />
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-700" />
+                <div>
+                  <div className="text-xs font-black text-amber-800">Antes de continuar</div>
+                  <p className="mt-2 text-xs leading-5 text-amber-900">
+                    O domínio não corresponde ao portal institucional conhecido. A aparência do site não confirma a sua legitimidade.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              <PrimaryButton icon={ArrowRight} onClick={onOpen} variant="danger">Abrir mesmo assim</PrimaryButton>
+              <PrimaryButton icon={XCircle} onClick={onBack} variant="secondary">Sair da ligação</PrimaryButton>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function PhishingPageView({ accountName, verificationEmail, onBack, onProvideInfo, onExit }) {
+  return (
+    <Shell title="Centro de verificação" onBack={onBack}>
+      <main className="mx-auto max-w-4xl px-4 py-8 md:px-8 md:py-12">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 p-6 text-white md:p-8">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-200">SICSI · Centro de segurança</div>
+                <div className="mt-2 text-xl font-black">Verificação de identidade digital</div>
+              </div>
+              <Shield size={25} />
+            </div>
+          </div>
+
+          <div className="p-6 md:p-8">
+            <div className="rounded-2xl border border-red-100 bg-red-50 p-5">
+              <div className="flex items-start gap-3">
+                <ShieldAlert size={18} className="mt-0.5 shrink-0 text-red-700" />
+                <div>
+                  <div className="text-xs font-black text-red-800">Identidade digital sinalizada</div>
+                  <p className="mt-2 text-xs leading-5 text-red-900">
+                    A identidade associada à comunicação requer confirmação. Para desbloquear a verificação, confirme os dados apresentados.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7 grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-black text-slate-600">Nome apresentado</label>
+                <input value={accountName} readOnly className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-black text-slate-600">Email de verificação</label>
+                <input value={verificationEmail} readOnly className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none" />
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="text-xs font-black text-slate-600">Código de confirmação</label>
+              <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                O código seria solicitado nesta etapa.
+              </div>
+            </div>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              <PrimaryButton icon={ShieldAlert} onClick={onProvideInfo} variant="danger">Continuar verificação</PrimaryButton>
+              <PrimaryButton icon={XCircle} onClick={onExit} variant="secondary">Sair</PrimaryButton>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function FeedbackView({
+  safe,
+  decisionLabel,
+  feedback,
+  onContinue,
+  onDownloadReport,
+  onFinish,
+  showFinalActions = false,
+}) {
+  const copy = FEEDBACK_COPY[safe ? "safe" : "risk"];
+  const Icon = copy.icon;
+  const tone = safe
+    ? {
+        card: "border-emerald-200 bg-emerald-50",
+        icon: "bg-emerald-100 text-emerald-700",
+        title: "text-emerald-800",
+        body: "text-emerald-950",
+        badge: "bg-emerald-100 text-emerald-800",
+      }
+    : {
+        card: "border-red-200 bg-red-50",
+        icon: "bg-red-100 text-red-700",
+        title: "text-red-800",
+        body: "text-red-950",
+        badge: "bg-red-100 text-red-800",
+      };
+
+  return (
+    <Shell title="Feedback da decisão">
+      <main className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-3xl items-center px-4 py-10 md:px-8">
+        <section className="w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className={`p-6 md:p-7 ${safe ? "bg-gradient-to-br from-emerald-700 to-emerald-600" : "bg-gradient-to-br from-red-700 to-red-600"} text-white`}>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+                <Icon size={23} />
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.16em] text-white/80">Phishing 05 · Feedback</div>
+                <h1 className="mt-2 text-2xl font-black md:text-3xl">{copy.label}</h1>
+                <p className="mt-3 text-sm leading-6 text-white/90">{decisionLabel}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 p-5 md:p-7">
+            <div className={`rounded-2xl border p-5 ${tone.card}`}>
+              <div className={`inline-flex rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] ${tone.badge}`}>Consequência</div>
+              <p className={`mt-3 text-sm leading-7 ${tone.body}`}>{feedback}</p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Decisão</div>
+                <div className="mt-2 text-sm font-black text-slate-800">{decisionLabel}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">Estado</div>
+                <div className={`mt-2 text-sm font-black ${safe ? "text-emerald-700" : "text-red-700"}`}>{safe ? "RISCO INTERROMPIDO" : "RISCO AUMENTADO"}</div>
+              </div>
+            </div>
+
+            {showFinalActions ? (
+  <div className="grid gap-3 sm:grid-cols-2">
+    <PrimaryButton
+      icon={Download}
+      onClick={onDownloadReport}
+      variant="secondary"
+      className="w-full"
+    >
+      Baixar relatório da minha experiência
+    </PrimaryButton>
+
+    <PrimaryButton
+      icon={CheckCircle2}
+      onClick={onFinish}
+      className="w-full"
+    >
+      Finalizar simulação
+    </PrimaryButton>
+  </div>
+) : (
+  <PrimaryButton
+    icon={ArrowRight}
+    onClick={onContinue}
+    className="w-full"
+  >
+    Continuar experiência
+  </PrimaryButton>
+)}
+          </div>
+        </section>
+      </main>
+    </Shell>
+  );
+}
+
+function AttackChainView({ onBack, onContinue }) {
+  const steps = [
+    ["01", "Identidade aparente", "Nome e fotografia semelhantes foram utilizados para criar confiança."],
+    ["02", "Solicitação urgente", "A urgência reduziu o tempo disponível para verificação."],
+    ["03", "Canal externo", "A comunicação conduziu a uma origem diferente do canal esperado."],
+    ["04", "Tentativa de recolha", "A página tentou transformar confiança em fornecimento de informação."],
+  ];
+
+  return (
+    <Shell title="Reconstrução do ataque" onBack={onBack}>
+      <main className="mx-auto max-w-4xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="p-6 md:p-8">
+            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Linha de evidências</div>
+            <h1 className="mt-2 text-2xl font-black text-slate-900">Como a fraude foi construída</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">Observe a cadeia completa sem transformar o resultado numa simples identificação de “site falso”.</p>
+
+            <div className="mt-7 space-y-3">
+              {steps.map(([number, title, description]) => (
+                <div key={number} className="flex gap-4 rounded-2xl border border-slate-200 p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-xs font-black text-blue-700">{number}</div>
+                  <div>
+                    <div className="text-sm font-black text-slate-800">{title}</div>
+                    <div className="mt-1 text-xs leading-5 text-slate-500">{description}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-7 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+              <div className="flex items-start gap-3">
+                <FileWarning size={18} className="mt-0.5 shrink-0 text-blue-700" />
+                <p className="text-xs leading-5 text-slate-600">
+                  A identidade visual pode ser copiada. A validação deve considerar o identificador, o contexto, o domínio e uma confirmação por canal independente.
+                </p>
+              </div>
+            </div>
+
+            <PrimaryButton icon={ArrowRight} onClick={onContinue} className="mt-7 w-full">Continuar para resposta</PrimaryButton>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function ResponseView({ onBack, onSecure, onReport, onIgnore }) {
+  return (
+    <Shell title="Resposta ao incidente" onBack={onBack}>
+      <main className="mx-auto max-w-4xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="p-6 md:p-8">
+            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Resposta final</div>
+            <h1 className="mt-2 text-2xl font-black text-slate-900">A identidade foi confirmada como suspeita</h1>
+            <p className="mt-3 text-sm leading-6 text-slate-500">Escolha a resposta que melhor reduz a exposição e preserva a evidência.</p>
+
+            <div className="mt-7 grid gap-3">
+              <button type="button" onClick={onSecure} className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 text-left transition hover:bg-emerald-50">
+                <div className="flex items-start gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><Shield size={20} /></div><div><div className="text-sm font-black text-emerald-900">Proteger a conta e encerrar o contacto</div><div className="mt-1 text-xs leading-5 text-emerald-800">Preserva a evidência, interrompe a interação suspeita e reduz a exposição.</div></div></div><ChevronRight className="text-emerald-500" size={18} />
+              </button>
+
+              <button type="button" onClick={onReport} className="flex items-center justify-between rounded-2xl border border-blue-200 bg-blue-50/60 p-5 text-left transition hover:bg-blue-50"><div className="flex items-start gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><Flag size={20} /></div><div><div className="text-sm font-black text-blue-900">Denunciar e alertar os afectados</div><div className="mt-1 text-xs leading-5 text-blue-800">Regista a identidade suspeita e reduz a possibilidade de outras pessoas serem enganadas.</div></div></div><ChevronRight className="text-blue-500" size={18} /></button>
+
+              <button type="button" onClick={onIgnore} className="flex items-center justify-between rounded-2xl border border-red-200 bg-red-50/60 p-5 text-left transition hover:bg-red-50"><div className="flex items-start gap-4"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-100 text-red-700"><XCircle size={20} /></div><div><div className="text-sm font-black text-red-900">Ignorar e continuar normalmente</div><div className="mt-1 text-xs leading-5 text-red-800">Não interrompe a identidade suspeita nem protege as pessoas que receberam o contacto.</div></div></div><ChevronRight className="text-red-500" size={18} /></button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function ResponseFeedbackView({
+  safe,
+  title,
+  description,
+  onDownloadReport,
+  onFinish,
+}) {
+  return (
+    <FeedbackView
+      safe={safe}
+      decisionLabel={title}
+      feedback={description}
+      onDownloadReport={onDownloadReport}
+      onFinish={onFinish}
+      showFinalActions
+    />
+  );
+}
+
+function readPhishingEvents() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("sicsi_simulation_events") || "[]");
+    return Array.isArray(raw)
+      ? raw.filter((event) => String(event?.simulation_id || "").startsWith("phishing-"))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function getSimulationLabel(simulationId) {
+  const labels = {
+    "phishing-01": "Simulação 01 — Actualização de dados académicos",
+    "phishing-02": "Simulação 02 — Verificação urgente da conta",
+    "phishing-03": "Simulação 03 — Pagamento",
+    "phishing-04": "Simulação 04 — Documento partilhado",
+    "phishing-05": "Simulação 05 — Identidade digital clonada",
+  };
+  return labels[simulationId] || simulationId;
+}
+
+function getFeedbackText(event) {
+  const metadata = event?.metadata || {};
+  const candidates = [
+    metadata.feedback,
+    metadata.feedback_text,
+    metadata.feedbackText,
+    metadata.feedback_message,
+    metadata.message,
+    event?.feedback,
+  ];
+  const value = candidates.find((candidate) => typeof candidate === "string" && candidate.trim());
+  return value ? value.trim() : "";
+}
+
+function inferFeedbackOutcome(event) {
+  const metadata = event?.metadata || {};
+  if (typeof metadata.safe === "boolean") return metadata.safe ? "positive" : "negative";
+
+  const explicit = String(metadata.feedback_type || metadata.outcome || metadata.result || event?.outcome || "").toLowerCase();
+  if (/positive|positivo|safe|segur|success|correct|sucesso|successo|secure/.test(explicit)) return "positive";
+  if (/negative|negativo|risk|risco|danger|unsafe|fail|falha|expos/.test(explicit)) return "negative";
+
+  const feedback = getFeedbackText(event).toLowerCase();
+  if (!feedback) return "neutral";
+  if (/reduziu|protegeu|interrompeu|evitou|bloqueou|denunciou|cancelou|saiu|seguro|segura|boa decisão|boa pratica|confirmou.*canal|não foi partilh|nao foi partilh/.test(feedback)) return "positive";
+  if (/risco|compromet|expos|autoriz|permitiu|perdeu o controlo|partilhou|partilhado|fraude.*avanç|fraude.*avanc|perig|ameaça.*avanç|ameaca.*avanc/.test(feedback)) return "negative";
+
+  return "neutral";
+}
+
+function collectDecisionSummaries(events) {
+  const orderedIds = ["phishing-01", "phishing-02", "phishing-03", "phishing-04", "phishing-05"];
+  const grouped = Object.fromEntries(orderedIds.map((id) => [id, { id, title: getSimulationLabel(id), positive: [], negative: [] }]));
+
+  events.forEach((event) => {
+    const id = event?.simulation_id;
+    if (!grouped[id]) return;
+
+    const feedback = getFeedbackText(event);
+    const outcome = inferFeedbackOutcome(event);
+    if (!feedback || (outcome !== "positive" && outcome !== "negative")) return;
+
+    const item = {
+      label: event?.metadata?.decision_label || event?.metadata?.decisionLabel || event?.action || "Decisão registada",
+      feedback,
+    };
+    grouped[id][outcome].push(item);
+  });
+
+  return orderedIds.map((id) => grouped[id]);
+}
+
+function downloadJourneyPdf(accountEmail, accountName) {
+  const doc = new jsPDF();
+  const events = readPhishingEvents();
+  const summaries = collectDecisionSummaries(events);
+  let y = 18;
+
+  const addLine = (text, size = 10, bold = false, x = 16) => {
+    doc.setFontSize(size);
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    const lines = doc.splitTextToSize(String(text), 178);
+    if (y + lines.length * (size <= 9 ? 4.5 : 5.5) > 272) {
+      doc.addPage();
+      y = 18;
+    }
+    doc.text(lines, x, y);
+    y += lines.length * (size <= 9 ? 4.5 : 5.5) + 2;
+  };
+
+  addLine("RELATÓRIO DA MINHA EXPERIÊNCIA EM PHISHING", 15, true);
+  addLine("SICSI · Síntese de todos os feedbacks positivos e negativos", 10, false);
+  addLine(`Participante: ${accountName}`, 9);
+  addLine(`Conta: ${accountEmail}`, 9);
+  y += 4;
+
+  summaries.forEach((simulation) => {
+    addLine(simulation.title, 11, true);
+
+    if (simulation.positive.length) {
+      addLine("FEEDBACKS POSITIVOS", 9, true);
+      simulation.positive.forEach((item) => {
+        addLine(`+ ${item.label}`, 9, true);
+        addLine(item.feedback, 8.5, false, 20);
+      });
+    } else {
+      addLine("Feedbacks positivos: nenhum registado.", 8.5, false);
+    }
+
+    y += 1;
+
+    if (simulation.negative.length) {
+      addLine("FEEDBACKS NEGATIVOS", 9, true);
+      simulation.negative.forEach((item) => {
+        addLine(`− ${item.label}`, 9, true);
+        addLine(item.feedback, 8.5, false, 20);
+      });
+    } else {
+      addLine("Feedbacks negativos: nenhum registado.", 8.5, false);
+    }
+
+    y += 4;
+  });
+
+  addLine("NOTA", 11, true);
+  addLine("O relatório reúne todos os feedbacks positivos e negativos que estejam registados nos eventos das cinco simulações. Não reproduz palavras-passe, códigos MFA ou conteúdos sensíveis.", 9);
+
+  doc.save("SICSI_Relatorio_Da_Minha_Experiencia_Phishing.pdf");
+}
+
+export default function Phishing05Page() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const accountName = getAccountName(user);
+  const accountEmail = getAccountEmail(user);
+  const identityHandle = getIdentityHandle(accountName);
+  const clonedEmail = `${identityHandle.slice(1)}@universidade-mail.com`;
+  const replyEmail = `${identityHandle.slice(1)}.confirmacao@outlook-mail.com`;
+  const [state, setState] = useState(STATES.MESSAGE);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [startedAt, setStartedAt] = useState(Date.now());
+  const [elapsed, setElapsed] = useState(0);
+  const [decisions, setDecisions] = useState([]);
+  const [feedbackContext, setFeedbackContext] = useState(null);
+
+  useEffect(() => {
+    const current = getCurrentSimulation();
+    if (current && current.simulation_id === SIMULATION.id && !current.completed) {
+      setStartedAt(current.started_at ? new Date(current.started_at).getTime() : Date.now());
+    } else {
+      const session = startSimulation({
+        area: SIMULATION.area,
+        simulationId: SIMULATION.id,
+        simulationNumber: SIMULATION.number,
+        initialState: STATES.MESSAGE,
+      });
+      setStartedAt(session?.started_at ? new Date(session.started_at).getTime() : Date.now());
+      registerAction({
+        action: "simulation_started",
+        nextState: STATES.MESSAGE,
+        interactionType: "system",
+        metadata: { simulation_id: SIMULATION.id, simulation_number: SIMULATION.number, title: SIMULATION.title },
+      });
+    }
+    setSessionReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sessionReady) return undefined;
+    const timer = window.setInterval(() => setElapsed(Date.now() - startedAt), 1000);
+    return () => window.clearInterval(timer);
+  }, [sessionReady, startedAt]);
+
+  function track(action, nextState, interactionType = "interaction", metadata = {}) {
+    const result = registerAction({ action, nextState, interactionType, metadata });
+    return result;
+  }
+
+  function recordFeedback({ safe, action, decisionLabel, feedback, nextState = STATES.FEEDBACK }) {
+    track(action, nextState, "decision", {
+      safe,
+      report_relevant: true,
+      decision_label: decisionLabel,
+      feedback,
+      simulation_id: SIMULATION.id,
+    });
+    setDecisions((current) => [...current, { safe, decisionLabel, feedback }]);
+    setFeedbackContext({ safe, decisionLabel, feedback });
+    setState(STATES.FEEDBACK);
+  }
+
+  function openDetails() {
+    track("inspect_message_details", STATES.DETAILS, "navigation", { report_relevant: false });
+    setState(STATES.DETAILS);
+  }
+
+  function openProfile() {
+    track("inspect_cloned_profile", STATES.PROFILE, "navigation", { report_relevant: true, safe: true, decision_label: "Inspeccionou o perfil antes de responder", feedback: "Verificar o identificador e a origem antes de confiar na aparência ajuda a detectar uma identidade clonada." });
+    setState(STATES.PROFILE);
+  }
+
+  function openConversation() {
+    track("open_cloned_conversation", STATES.CONVERSATION, "navigation", { report_relevant: false });
+    setState(STATES.CONVERSATION);
+  }
+
+  function reportCommunication() {
+    recordFeedback({
+      safe: true,
+      action: "report_cloned_identity",
+      decisionLabel: "Denunciou a comunicação suspeita",
+      feedback: "A comunicação foi tratada como suspeita e interrompida antes da entrega de informação. Denunciar e preservar o contexto reduz a probabilidade de continuidade do ataque.",
+      nextState: STATES.FEEDBACK,
+    });
+  }
+
+  function verifyIdentity() {
+    track("request_independent_identity_verification", STATES.VERIFICATION, "security_review", { report_relevant: true, safe: true, decision_label: "Escolheu confirmar a identidade por um canal independente", feedback: "A confirmação por um canal conhecido rompe a confiança artificial criada pelo perfil clonado." });
+    setState(STATES.VERIFICATION);
+  }
+
+  function confirmIdentity() {
+    recordFeedback({
+      safe: true,
+      action: "confirm_identity_independently",
+      decisionLabel: "Confirmou a identidade através de um canal independente",
+      feedback: "A pessoa contactada confirmou que não tinha enviado o pedido. A inconsistência confirmou a clonagem e impediu que a identidade visual fosse usada como prova de legitimidade.",
+    });
+  }
+
+  function sendDocument() {
+    recordFeedback({
+      safe: false,
+      action: "send_document_to_cloned_identity",
+      decisionLabel: "Enviou o documento ao perfil não verificado",
+      feedback: "O documento foi disponibilizado no cenário a uma identidade que não foi validada. A confiança baseada apenas no nome e na fotografia permitiu que a fraude avançasse.",
+    });
+  }
+
+  function openLink() {
+    track("open_cloned_identity_link", STATES.LINK, "navigation", { report_relevant: true, safe: false, decision_label: "Abriu a ligação enviada pelo perfil suspeito", feedback: "Abrir a ligação não confirma legitimidade e transporta a decisão para um domínio diferente do canal institucional conhecido." });
+    setState(STATES.LINK);
+  }
+
+  function openPhishingPage() {
+    track("open_identity_verification_page", STATES.PHISHING_PAGE, "navigation", { report_relevant: true, safe: false, decision_label: "Prosseguiu para a página de verificação externa", feedback: "A página externa tentou transformar a confiança no perfil clonado em confiança no domínio e no pedido de informação." });
+    setState(STATES.PHISHING_PAGE);
+  }
+
+  function provideInfo() {
+    recordFeedback({
+      safe: false,
+      action: "provide_identity_information_to_phishing_page",
+      decisionLabel: "Prosseguiu com a verificação numa página externa",
+      feedback: "A informação foi encaminhada no cenário para uma página associada ao domínio suspeito. Uma clonagem de identidade pode ser utilizada como porta de entrada para recolher informação adicional.",
+    });
+  }
+
+  function exitPhishingPage() {
+    recordFeedback({
+      safe: true,
+      action: "exit_identity_verification_page",
+      decisionLabel: "Saiu da página de verificação externa",
+      feedback: "A ligação foi interrompida antes da partilha de informação. Sair quando o domínio não corresponde ao serviço esperado reduz imediatamente a exposição.",
+    });
+  }
+
+  function continueFromFeedback() {
+    track("continue_to_attack_chain", STATES.ATTACK_CHAIN, "navigation", {
+      report_relevant: false,
+      previous_decision: feedbackContext?.decisionLabel,
+    });
+    setState(STATES.ATTACK_CHAIN);
+  }
+
+  function continueToResponse() {
+    track("continue_to_incident_response", STATES.RESPONSE, "navigation", { report_relevant: false });
+    setState(STATES.RESPONSE);
+  }
+
+  function finalSecureResponse() {
+    const feedback = "A identidade suspeita foi denunciada, o contacto foi interrompido e a resposta concentrou-se em reduzir a exposição sem perder as evidências do incidente.";
+    track("protect_and_end_suspicious_contact", STATES.RESPONSE_FEEDBACK, "decision", { safe: true, report_relevant: true, decision_label: "Protegeu a conta e encerrou o contacto suspeito", feedback, simulation_id: SIMULATION.id });
+    setDecisions((current) => [...current, { safe: true, decisionLabel: "Protegeu a conta e encerrou o contacto suspeito", feedback }]);
+    setFeedbackContext({ safe: true, decisionLabel: "Protegeu a conta e encerrou o contacto suspeito", feedback });
+    setState(STATES.RESPONSE_FEEDBACK);
+  }
+
+  function reportAffected() {
+    const feedback = "A denúncia e o alerta aos afectados reduzem a possibilidade de a identidade clonada continuar a ser utilizada para novas tentativas.";
+    track("report_and_alert_affected_users", STATES.RESPONSE_FEEDBACK, "decision", { safe: true, report_relevant: true, decision_label: "Denunciou a identidade e alertou os afectados", feedback, simulation_id: SIMULATION.id });
+    setDecisions((current) => [...current, { safe: true, decisionLabel: "Denunciou a identidade e alertou os afectados", feedback }]);
+    setFeedbackContext({ safe: true, decisionLabel: "Denunciou a identidade e alertou os afectados", feedback });
+    setState(STATES.RESPONSE_FEEDBACK);
+  }
+
+  function ignoreIncident() {
+    const feedback = "Ignorar a identidade clonada deixa o perfil activo e permite que a mesma estratégia seja utilizada novamente contra outras pessoas.";
+    track("ignore_cloned_identity_incident", STATES.RESPONSE_FEEDBACK, "decision", { safe: false, report_relevant: true, decision_label: "Ignorou o incidente e continuou normalmente", feedback, simulation_id: SIMULATION.id });
+    setDecisions((current) => [...current, { safe: false, decisionLabel: "Ignorou o incidente e continuou normalmente", feedback }]);
+    setFeedbackContext({ safe: false, decisionLabel: "Ignorou o incidente e continuou normalmente", feedback });
+    setState(STATES.RESPONSE_FEEDBACK);
+  }
+
+  
+
+  function downloadReport() {
+    track("download_phishing_journey_report", STATES.RESPONSE_FEEDBACK, "download", { report_relevant: false, format: "pdf" });
+    downloadJourneyPdf(accountEmail, accountName);
+  }
+
+  function finishSimulation() {
+    track("complete_phishing_05", STATES.RESPONSE_FEEDBACK, "navigation", { report_relevant: true, safe: feedbackContext?.safe, decision_label: feedbackContext?.decisionLabel, feedback: feedbackContext?.feedback || "Experiência concluída." });
+    completeSimulation();
+    completeSimulationSession();
+    const session = getCurrentSimulation();
+    if (session?.session_id) clearSessionEvents(session.session_id);
+    navigate("/student/simulacoes");
+  }
+
+  function render() {
+    if (state === STATES.MESSAGE) {
+      return <MessageView account={accountEmail} accountName={accountName} onDetails={openDetails} onProfile={openProfile} onOpenLink={openLink} onReport={reportCommunication} />;
+    }
+    if (state === STATES.DETAILS) {
+      return <DetailsView accountName={accountName} clonedEmail={clonedEmail} replyEmail={replyEmail} onBack={() => setState(STATES.MESSAGE)} onProfile={openProfile} onConversation={openConversation} onLink={openLink} onReport={reportCommunication} />;
+    }
+    if (state === STATES.PROFILE) {
+      return <ProfileView accountName={accountName} identityHandle={identityHandle} onBack={() => setState(STATES.MESSAGE)} onVerify={verifyIdentity} onConversation={openConversation} onReport={reportCommunication} onLink={openLink} />;
+    }
+    if (state === STATES.CONVERSATION) {
+      return <ConversationView accountName={accountName} onBack={() => setState(STATES.MESSAGE)} onVerify={verifyIdentity} onSend={sendDocument} onLink={openLink} onReport={reportCommunication} />;
+    }
+    if (state === STATES.VERIFICATION) {
+      return <VerificationView onBack={() => setState(STATES.PROFILE)} onConfirm={confirmIdentity} onCancel={() => setState(STATES.PROFILE)} />;
+    }
+    if (state === STATES.LINK) {
+      return <LinkView onBack={() => setState(STATES.MESSAGE)} onOpen={openPhishingPage} />;
+    }
+    if (state === STATES.PHISHING_PAGE) {
+      return <PhishingPageView accountName={accountName} verificationEmail={clonedEmail} onBack={() => setState(STATES.LINK)} onProvideInfo={provideInfo} onExit={exitPhishingPage} />;
+    }
+    if (state === STATES.FEEDBACK) {
+      return <FeedbackView
+  safe={feedbackContext?.safe !== false}
+  decisionLabel={feedbackContext?.decisionLabel || "Decisão registada"}
+  feedback={feedbackContext?.feedback || "Interacção registada."}
+  onContinue={continueFromFeedback}
+  onDownloadReport={downloadReport}
+  onFinish={finishSimulation}
+  showFinalActions
+/>;
+    }
+    if (state === STATES.ATTACK_CHAIN) {
+      return <AttackChainView onBack={() => setState(STATES.FEEDBACK)} onContinue={continueToResponse} />;
+    }
+    if (state === STATES.RESPONSE) {
+      return <ResponseView onBack={() => setState(STATES.ATTACK_CHAIN)} onSecure={finalSecureResponse} onReport={reportAffected} onIgnore={ignoreIncident} />;
+    }
+    if (state === STATES.RESPONSE_FEEDBACK) {
+      return <ResponseFeedbackView
+  safe={feedbackContext?.safe !== false}
+  title={feedbackContext?.decisionLabel || "Resposta registada"}
+  description={feedbackContext?.feedback || "Resposta registada."}
+  onDownloadReport={downloadReport}
+  onFinish={finishSimulation}
+/>;
+    }
+    return <MessageView account={accountEmail} accountName={accountName} onDetails={openDetails} onProfile={openProfile} onOpenLink={openLink} onReport={reportCommunication} />;
+  }
+
+  if (!sessionReady) {
+    return (
+      <Shell title="Phishing 05">
+        <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
+          <div className="text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 animate-pulse"><Shield size={22} /></div>
+            <div className="mt-4 text-sm font-semibold text-slate-500">A preparar a experiência...</div>
+          </div>
+        </main>
+      </Shell>
+    );
+  }
+
+  return render();
+}
+

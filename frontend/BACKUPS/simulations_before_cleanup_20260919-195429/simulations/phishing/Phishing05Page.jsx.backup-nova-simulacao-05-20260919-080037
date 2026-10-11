@@ -1,0 +1,3705 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Copy,
+  Eye,
+  FileText,
+  Globe2,
+  KeyRound,
+  Laptop,
+  LockKeyhole,
+  LogIn,
+  Mail,
+  MonitorSmartphone,
+  RefreshCw,
+  Shield,
+  ShieldAlert,
+  Smartphone,
+  UserRound,
+  XCircle,
+} from "lucide-react";
+
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../../../context/AuthContext";
+
+import {
+  completeSimulation,
+  getCurrentSimulation,
+  registerAction,
+  startSimulation,
+} from "../engine/simulationEngine";
+
+import { clearSessionEvents } from "../engine/simulationTelemetry";
+
+import { completeSimulationSession } from "../engine/simulationSession";
+import { jsPDF } from "jspdf";
+
+const SIMULATION = {
+  area: "phishing",
+  id: "phishing-05",
+  number: 5,
+  title: "Conta académica",
+};
+
+const STATES = {
+  HOME: "academic_home",
+  LOGIN: "academic_login",
+  LOGIN_PROCESSING: "academic_login_processing",
+  MFA: "academic_mfa",
+  SECURITY_NOTICE: "academic_security_notice",
+  DEVICES: "academic_devices",
+  ACCOUNT_HOME: "academic_account_home",
+  ACTIVITY: "academic_activity",
+  DEVICES: "academic_devices",
+  RECOVERY: "academic_recovery",
+  SESSION_DETAIL: "academic_session_detail",
+  SECURITY_RESULT: "academic_security_result",
+  FEEDBACK: "academic_feedback",
+  COMPLETED: "academic_completed",
+};
+
+function formatDuration(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+    2,
+    "0"
+  )}`;
+}
+
+function getAccountEmail(user) {
+  return user?.email || user?.username || user?.login || "miguel.ncuna@sicsi.edu";
+}
+
+function GlassButton({
+  children,
+  icon: Icon = ArrowRight,
+  onClick,
+  variant = "primary",
+  disabled = false,
+  className = "",
+}) {
+  const variants = {
+    primary:
+      "bg-blue-700 text-white shadow-sm hover:bg-blue-800",
+    secondary:
+      "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+    light:
+      "border border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/15",
+    danger:
+      "border border-red-200 bg-white text-red-700 hover:bg-red-50",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+    >
+      {Icon ? <Icon size={17} /> : null}
+      {children}
+    </button>
+  );
+}
+
+function Shell({ children, onBack, title = "Conta académica" }) {
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-8">
+          <div className="flex items-center gap-3">
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                aria-label="Voltar"
+              >
+                <ArrowLeft size={17} />
+              </button>
+            ) : null}
+
+            <div>
+              <div className="text-sm font-black tracking-tight text-blue-800">
+                SICSI
+              </div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {title}
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-bold text-slate-500 sm:flex">
+            <Shield size={13} className="text-blue-600" />
+            Ambiente académico
+          </div>
+        </div>
+      </header>
+
+      {children}
+    </div>
+  );
+}
+
+function PortalCard({
+  icon: Icon,
+  title,
+  description,
+  meta,
+  onClick,
+  danger = false,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group w-full rounded-2xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+        danger
+          ? "border-red-100 hover:border-red-200"
+          : "border-slate-200 hover:border-blue-200"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+            danger
+              ? "bg-red-50 text-red-600"
+              : "bg-blue-50 text-blue-700"
+          }`}
+        >
+          <Icon size={21} />
+        </div>
+
+        <ChevronRight
+          size={18}
+          className="mt-1 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-500"
+        />
+      </div>
+
+      <h2 className="mt-5 text-sm font-black text-slate-800">{title}</h2>
+
+      <p className="mt-2 text-xs leading-5 text-slate-500">
+        {description}
+      </p>
+
+      {meta ? (
+        <div className="mt-4 border-t border-slate-100 pt-3 text-[10px] font-semibold text-slate-400">
+          {meta}
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
+function AcademicHome({
+  account,
+  onLogin,
+  onSecurity,
+  onActivity,
+}) {
+  return (
+    <Shell>
+      <main className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">
+        <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 text-white shadow-xl">
+          <div className="grid gap-8 p-7 md:grid-cols-[1.3fr_0.7fr] md:p-10">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-100 backdrop-blur">
+                Portal académico SICSI
+              </div>
+
+              <h1 className="mt-6 max-w-2xl text-3xl font-black tracking-tight md:text-4xl">
+                A sua conta académica
+              </h1>
+
+              <p className="mt-4 max-w-xl text-sm leading-6 text-blue-100">
+                Aceda aos serviços académicos, consulte actividade recente e
+                mantenha a sua sessão institucional.
+              </p>
+
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+                <GlassButton
+                  icon={LogIn}
+                  onClick={onLogin}
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Iniciar sessão
+                </GlassButton>
+
+                <GlassButton
+                  icon={Shield}
+                  onClick={onSecurity}
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Ver segurança
+                </GlassButton>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-100">
+                Conta actual
+              </div>
+
+              <div className="mt-4 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                  <UserRound size={22} />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold">
+                    {account}
+                  </div>
+                  <div className="mt-1 text-[10px] text-blue-100">
+                    Conta institucional
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onActivity}
+                className="mt-6 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-xs font-semibold text-blue-50 transition hover:bg-white/10"
+              >
+                Actividade recente
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <section className="mt-7 grid gap-4 md:grid-cols-3">
+          <PortalCard
+            icon={LockKeyhole}
+            title="Acesso à conta"
+            description="Autenticação através do ambiente académico institucional."
+            meta="AUTENTICAÇÃO"
+            onClick={onLogin}
+          />
+
+          <PortalCard
+            icon={ShieldAlert}
+            title="Segurança da conta"
+            description="Consulte dispositivos, sessões e mecanismos de protecção."
+            meta="SEGURANÇA"
+            onClick={onSecurity}
+          />
+
+          <PortalCard
+            icon={Activity}
+            title="Actividade recente"
+            description="Consulte os últimos acontecimentos associados à conta."
+            meta="ACTIVIDADE"
+            onClick={onActivity}
+          />
+        </section>
+      </main>
+    </Shell>
+  );
+}
+
+function LoginView({
+  account,
+  password,
+  setPassword,
+  onSubmit,
+  onBack,
+  onRecovery,
+}) {
+  return (
+    <Shell title="Autenticação institucional" onBack={onBack}>
+      <main className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-14">
+        <div className="grid overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl md:grid-cols-[0.85fr_1.15fr]">
+          <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 p-7 text-white md:p-10">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+              <LockKeyhole size={23} />
+            </div>
+
+            <div className="mt-8 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
+              Acesso institucional
+            </div>
+
+            <h1 className="mt-2 text-2xl font-black">
+              Iniciar sessão
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-blue-100">
+              Utilize as credenciais associadas à sua conta académica.
+            </p>
+
+            <div className="mt-8 rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-blue-100">
+                Conta
+              </div>
+              <div className="mt-1 break-all text-sm font-semibold">
+                {account}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-7 md:p-10">
+            <div className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Autenticação
+            </div>
+
+            <h2 className="mt-2 text-xl font-black text-slate-800">
+              Verificar identidade
+            </h2>
+
+            <div className="mt-7 space-y-5">
+              <div>
+                <label className="text-xs font-bold text-slate-600">
+                  Conta académica
+                </label>
+
+                <input
+                  value={account}
+                  readOnly
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-600">
+                  Palavra-passe
+                </label>
+
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Introduza a palavra-passe"
+                  autoComplete="off"
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+                />
+              </div>
+
+              <GlassButton
+                icon={LogIn}
+                onClick={onSubmit}
+                className="w-full"
+              >
+                Continuar
+              </GlassButton>
+
+              <button
+                type="button"
+                onClick={onRecovery}
+                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-bold text-blue-700 transition hover:bg-blue-50"
+              >
+                <KeyRound size={15} />
+                Não consigo aceder à conta
+              </button>
+            </div>
+
+            <div className="mt-7 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <Shield size={16} className="mt-0.5 shrink-0 text-blue-600" />
+                <p className="text-[11px] leading-5 text-slate-500">
+                  A autenticação decorre num ambiente institucional.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function LoginProcessingView() {
+  return (
+    <Shell title="Autenticação institucional">
+      <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+            <RefreshCw size={25} className="animate-spin" />
+          </div>
+
+          <div className="mt-6 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            Serviço de autenticação
+          </div>
+
+          <h1 className="mt-2 text-xl font-black text-slate-800">
+            A verificar a sessão
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            O pedido está a ser processado pelo serviço institucional.
+          </p>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function MfaView({
+  code,
+  setCode,
+  onContinue,
+  onBack,
+  onAlternative,
+}) {
+  return (
+    <Shell title="Verificação adicional" onBack={onBack}>
+      <main className="mx-auto max-w-2xl px-4 py-10 md:px-8 md:py-16">
+        <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-xl md:p-9">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+            <Smartphone size={22} />
+          </div>
+
+          <div className="mt-6 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            Segundo factor
+          </div>
+
+          <h1 className="mt-2 text-2xl font-black text-slate-800">
+            Verificação adicional
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            O sistema solicitou uma confirmação adicional para concluir a
+            autenticação.
+          </p>
+
+          <div className="mt-7 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+            <div className="flex items-start gap-3">
+              <ShieldAlert size={18} className="mt-0.5 shrink-0 text-blue-700" />
+
+              <div>
+                <div className="text-xs font-bold text-blue-800">
+                  Pedido de confirmação
+                </div>
+                <div className="mt-1 text-xs leading-5 text-slate-600">
+                  Introduza o código recebido no seu dispositivo de
+                  autenticação.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-7">
+            <label className="text-xs font-bold text-slate-600">
+              Código de verificação
+            </label>
+
+            <input
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="Código de 6 dígitos"
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm tracking-[0.35em] text-slate-800 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+            />
+          </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <GlassButton
+              icon={CheckCircle2}
+              onClick={onContinue}
+            >
+              Confirmar
+            </GlassButton>
+
+            <GlassButton
+              icon={RefreshCw}
+              variant="secondary"
+              onClick={onAlternative}
+            >
+              Usar outra opção
+            </GlassButton>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function SecurityNoticeView({
+  onContinue,
+  onBack,
+}) {
+  return (
+    <Shell title="Aviso de segurança" onBack={onBack}>
+      <main className="mx-auto max-w-3xl px-4 py-10 md:px-8 md:py-16">
+        <div className="overflow-hidden rounded-3xl border border-red-100 bg-white shadow-xl">
+          <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 p-7 text-white md:p-9">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+              <ShieldAlert size={23} />
+            </div>
+
+            <div className="mt-6 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
+              Segurança da conta
+            </div>
+
+            <h1 className="mt-2 text-2xl font-black">
+              Actividade de autenticação recente
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-blue-100">
+              O portal detectou uma sessão recente que requer confirmação.
+            </p>
+          </div>
+
+          <div className="p-7 md:p-9">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <Globe2 size={18} className="text-slate-500" />
+                <div className="mt-3 text-[10px] font-bold uppercase text-slate-400">
+                  Origem
+                </div>
+                <div className="mt-1 text-xs font-bold text-slate-800">
+                  Maputo
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <Laptop size={18} className="text-slate-500" />
+                <div className="mt-3 text-[10px] font-bold uppercase text-slate-400">
+                  Dispositivo
+                </div>
+                <div className="mt-1 text-xs font-bold text-slate-800">
+                  Windows
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <Clock3 size={18} className="text-slate-500" />
+                <div className="mt-3 text-[10px] font-bold uppercase text-slate-400">
+                  Estado
+                </div>
+                <div className="mt-1 text-xs font-bold text-slate-800">
+                  A verificar
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-slate-200 p-5">
+              <div className="flex items-start gap-3">
+                <AlertCircle size={18} className="mt-0.5 shrink-0 text-blue-600" />
+
+                <div>
+                  <div className="text-xs font-bold text-slate-800">
+                    Detalhes da sessão
+                  </div>
+
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Pode consultar os dispositivos activos, actividade recente
+                    e opções de recuperação da conta.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <GlassButton
+                icon={ArrowLeft}
+                variant="secondary"
+                onClick={onBack}
+              >
+                Voltar
+              </GlassButton>
+
+              <GlassButton
+                icon={ArrowRight}
+                onClick={onContinue}
+              >
+                Continuar
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function AccountHomeView({
+  account,
+  onActivity,
+  onDevices,
+  onRecovery,
+  onFinish,
+}) {
+  return (
+    <Shell title="Conta académica">
+      <main className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                Sessão activa
+              </div>
+
+              <h1 className="mt-2 text-2xl font-black text-slate-800">
+                Bem-vindo à conta académica
+              </h1>
+
+              <p className="mt-2 break-all text-sm text-slate-500">
+                {account}
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-2 self-start rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-700">
+              <CheckCircle2 size={14} />
+              Sessão autenticada
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <PortalCard
+              icon={Activity}
+              title="Actividade"
+              description="Consultar os acontecimentos recentes da conta."
+              onClick={onActivity}
+            />
+
+            <PortalCard
+              icon={MonitorSmartphone}
+              title="Dispositivos e sessões"
+              description="Consultar sessões e dispositivos associados."
+              onClick={onDevices}
+            />
+
+            <PortalCard
+              icon={KeyRound}
+              title="Recuperação da conta"
+              description="Aceder às opções de recuperação e segurança."
+              onClick={onRecovery}
+            />
+          </div>
+
+          <div className="mt-7 flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
+            <GlassButton
+              icon={ArrowRight}
+              onClick={onFinish}
+            >
+              Finalizar simulação e ver o meu percurso
+            </GlassButton>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function ActivityView({
+  onBack,
+  onSession,
+}) {
+  return (
+    <Shell title="Actividade da conta" onBack={onBack}>
+      <main className="mx-auto max-w-4xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-6">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+              Registo da conta
+            </div>
+
+            <h1 className="mt-2 text-xl font-black text-slate-800">
+              Actividade recente
+            </h1>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            <button
+              type="button"
+              onClick={onSession}
+              className="flex w-full items-center justify-between gap-4 p-5 text-left transition hover:bg-slate-50"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                  <LogIn size={18} />
+                </div>
+
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    Nova autenticação
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Windows · navegador web · sessão actual
+                  </div>
+                </div>
+              </div>
+
+              <ChevronRight size={17} className="text-slate-300" />
+            </button>
+
+            <div className="flex items-start gap-4 p-5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
+                <Mail size={18} />
+              </div>
+
+              <div>
+                <div className="text-sm font-bold text-slate-800">
+                  Notificação institucional
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Serviço académico · comunicação automática
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
+                <FileText size={18} />
+              </div>
+
+              <div>
+                <div className="text-sm font-bold text-slate-800">
+                  Actualização de dados
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Perfil académico · operação concluída
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function DevicesView({
+  onBack,
+  onSession,
+  onRecovery,
+}) {
+  return (
+    <Shell title="Dispositivos e sessões" onBack={onBack}>
+      <main className="mx-auto max-w-4xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            Sessões
+          </div>
+
+          <h1 className="mt-2 text-xl font-black text-slate-800">
+            Dispositivos associados
+          </h1>
+
+          <div className="mt-7 space-y-3">
+            <button
+              type="button"
+              onClick={onSession}
+              className="flex w-full items-center justify-between rounded-2xl border border-blue-100 bg-blue-50/50 p-4 text-left transition hover:bg-blue-50"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-blue-700">
+                  <Laptop size={20} />
+                </div>
+
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    Windows · sessão actual
+                  </div>
+                  <div className="mt-1 text-[10px] text-slate-500">
+                    Navegador web · sessão activa
+                  </div>
+                </div>
+              </div>
+
+              <ChevronRight size={17} className="text-slate-300" />
+            </button>
+
+            <div className="flex items-center gap-4 rounded-2xl border border-slate-200 p-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-50 text-slate-500">
+                <Smartphone size={20} />
+              </div>
+
+              <div>
+                <div className="text-sm font-bold text-slate-800">
+                  Dispositivo móvel
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  Última actividade há 2 dias
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <GlassButton
+              icon={KeyRound}
+              onClick={onRecovery}
+              variant="secondary"
+            >
+              Opções de recuperação
+            </GlassButton>
+
+            <GlassButton
+              icon={ArrowLeft}
+              onClick={onBack}
+              variant="secondary"
+            >
+              Voltar
+            </GlassButton>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function RecoveryView({
+  onBack,
+  onContinue,
+}) {
+  return (
+    <Shell title="Recuperação da conta" onBack={onBack}>
+      <main className="mx-auto max-w-3xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-xl md:p-9">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+            <KeyRound size={22} />
+          </div>
+
+          <div className="mt-6 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            Recuperação
+          </div>
+
+          <h1 className="mt-2 text-2xl font-black text-slate-800">
+            Opções de recuperação
+          </h1>
+
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            Seleccione uma opção para continuar a verificar a segurança da
+            conta.
+          </p>
+
+          <div className="mt-7 space-y-3">
+            <button
+              type="button"
+              onClick={onContinue}
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-200 hover:bg-blue-50/30"
+            >
+              <div className="flex items-center gap-4">
+                <Mail size={20} className="text-blue-700" />
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    Receber instruções por email
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Endereço institucional associado à conta
+                  </div>
+                </div>
+              </div>
+
+              <ChevronRight size={17} className="text-slate-300" />
+            </button>
+
+            <button
+              type="button"
+              onClick={onContinue}
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-200 hover:bg-blue-50/30"
+            >
+              <div className="flex items-center gap-4">
+                <Smartphone size={20} className="text-blue-700" />
+                <div>
+                  <div className="text-sm font-bold text-slate-800">
+                    Confirmar através do dispositivo
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Método de autenticação secundário
+                  </div>
+                </div>
+              </div>
+
+              <ChevronRight size={17} className="text-slate-300" />
+            </button>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function SessionDetailView({
+  onBack,
+  onSecurity,
+}) {
+  return (
+    <Shell title="Detalhes da sessão" onBack={onBack}>
+      <main className="mx-auto max-w-3xl px-4 py-8 md:px-8 md:py-12">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-6 md:p-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                <MonitorSmartphone size={21} />
+              </div>
+
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                  Sessão
+                </div>
+                <h1 className="mt-1 text-xl font-black text-slate-800">
+                  Windows · navegador web
+                </h1>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 p-6 md:grid-cols-2 md:p-8">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase text-slate-400">
+                Localização
+              </div>
+              <div className="mt-2 text-sm font-semibold text-slate-800">
+                Maputo
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase text-slate-400">
+                Navegador
+              </div>
+              <div className="mt-2 text-sm font-semibold text-slate-800">
+                Chrome
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase text-slate-400">
+                Estado
+              </div>
+              <div className="mt-2 text-sm font-semibold text-slate-800">
+                Activo
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase text-slate-400">
+                Segurança
+              </div>
+              <div className="mt-2 text-sm font-semibold text-slate-800">
+                Verificação disponível
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-100 p-6 sm:flex-row sm:justify-end md:p-8">
+            <GlassButton
+              icon={ArrowLeft}
+              variant="secondary"
+              onClick={onBack}
+            >
+              Voltar
+            </GlassButton>
+
+            <GlassButton
+              icon={Shield}
+              onClick={onSecurity}
+            >
+              Continuar verificação
+            </GlassButton>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function SecurityResultView({
+  onBack,
+  onFeedback,
+}) {
+  return (
+    <Shell title="Segurança da conta">
+      <main className="mx-auto max-w-3xl px-4 py-10 md:px-8 md:py-16">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 p-8 text-white md:p-10">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+              <Shield size={23} />
+            </div>
+
+            <div className="mt-6 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
+              Estado da conta
+            </div>
+
+            <h1 className="mt-2 text-2xl font-black">
+              Verificação da conta processada
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-blue-100">
+              As interacções realizadas nesta sessão foram registadas no
+              percurso da simulação.
+            </p>
+          </div>
+
+          <div className="p-7 md:p-9">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <Activity size={18} className="text-blue-700" />
+                <div className="mt-3 text-[10px] font-bold uppercase text-slate-400">
+                  Actividade
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-800">
+                  Registada
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <Shield size={18} className="text-blue-700" />
+                <div className="mt-3 text-[10px] font-bold uppercase text-slate-400">
+                  Sessão
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-800">
+                  Processada
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <LockKeyhole size={18} className="text-blue-700" />
+                <div className="mt-3 text-[10px] font-bold uppercase text-slate-400">
+                  Segredos
+                </div>
+                <div className="mt-1 text-sm font-bold text-slate-800">
+                  Não armazenados
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <GlassButton
+                icon={ArrowLeft}
+                variant="secondary"
+                onClick={onBack}
+              >
+                Voltar à conta
+              </GlassButton>
+
+              <GlassButton
+                icon={Activity}
+                onClick={onFeedback}
+              >
+                Ver o meu relatório de percurso
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function FeedbackView({
+  events,
+  duration,
+  onBack,
+  onClose,
+}) {
+  const summary = useMemo(() => {
+    const meaningful = events.filter(
+      (event) =>
+        event.action &&
+        ![
+          "simulation_started",
+          "continue_to_simulation_05",
+        ].includes(event.action)
+    );
+
+    const navigationCount = meaningful.filter(
+      (event) => event.interaction_type === "navigation"
+    ).length;
+
+    const authenticationActions = meaningful.filter((event) =>
+      String(event.action).includes("authentication")
+    ).length;
+
+    const securityActions = meaningful.filter((event) =>
+      String(event.action).includes("security")
+    ).length;
+
+    return {
+      total: meaningful.length,
+      navigationCount,
+      authenticationActions,
+      securityActions,
+    };
+  }, [events]);
+
+  return (
+    <Shell title="Feedback do percurso">
+      <main className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 p-7 text-white md:p-9">
+            <div className="flex items-start justify-between gap-5">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
+                  SICSI · Percurso da simulação
+                </div>
+
+                <h1 className="mt-2 text-2xl font-black md:text-3xl">
+                  Feedback do meu percurso
+                </h1>
+
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100">
+                  Esta vista apresenta o percurso efectivo registado durante
+                  a experiência.
+                </p>
+              </div>
+
+              <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 backdrop-blur sm:flex">
+                <Activity size={23} />
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 md:p-9">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Interacções
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-800">
+                  {summary.total}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Navegações
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-800">
+                  {summary.navigationCount}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Autenticação
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-800">
+                  {summary.authenticationActions}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Duração
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-800">
+                  {formatDuration(duration)}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    Linha temporal
+                  </div>
+
+                  <h2 className="mt-1 text-lg font-black text-slate-800">
+                    Percurso registado
+                  </h2>
+                </div>
+
+                <div className="text-xs font-semibold text-slate-400">
+                  {events.length} eventos
+                </div>
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+                {events.length === 0 ? (
+                  <div className="p-6 text-sm text-slate-500">
+                    Não existem eventos disponíveis para esta sessão.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {events.map((event, index) => (
+                      <div
+                        key={`${event.sequence}-${event.timestamp}-${index}`}
+                        className="flex gap-4 p-4"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[10px] font-black text-blue-700">
+                          {event.sequence}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="break-words text-xs font-bold text-slate-800">
+                            {event.action}
+                          </div>
+
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
+                            <span>
+                              Estado: {event.current_state || "—"}
+                            </span>
+
+                            <span>
+                              Próximo: {event.next_state || "—"}
+                            </span>
+
+                            <span>
+                              Tipo: {event.interaction_type || "—"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-7 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+              <div className="flex items-start gap-3">
+                <Shield size={18} className="mt-0.5 shrink-0 text-blue-700" />
+
+                <div>
+                  <div className="text-xs font-bold text-blue-800">
+                    Privacidade da sessão
+                  </div>
+
+                  <p className="mt-2 text-xs leading-5 text-slate-600">
+                    O percurso utiliza eventos de interacção. Palavras-passe,
+                    códigos MFA, tokens e outros segredos não são apresentados
+                    nem armazenados no feedback.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <GlassButton
+                icon={ArrowLeft}
+                variant="secondary"
+                onClick={onBack}
+              >
+                Voltar
+              </GlassButton>
+
+              <GlassButton
+                icon={XCircle}
+                variant="danger"
+                onClick={onClose}
+              >
+                Encerrar simulação
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function CompletedView({
+  events,
+  duration,
+  onFeedback,
+  onClose,
+}) {
+  return (
+    <Shell title="Simulação concluída">
+      <main className="mx-auto max-w-3xl px-4 py-10 md:px-8 md:py-16">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+          <div className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 p-8 text-white md:p-10">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 backdrop-blur">
+              <CheckCircle2 size={27} />
+            </div>
+
+            <div className="mt-6 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100">
+              Phishing 05
+            </div>
+
+            <h1 className="mt-2 text-2xl font-black md:text-3xl">
+              Simulação concluída
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-blue-100">
+              O percurso desta experiência está pronto para consulta.
+            </p>
+          </div>
+
+          <div className="p-7 md:p-9">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Eventos
+                </div>
+                <div className="mt-2 text-xl font-black text-slate-800">
+                  {events.length}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Experiência
+                </div>
+                <div className="mt-2 text-xl font-black text-slate-800">
+                  05 / 05
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  Duração
+                </div>
+                <div className="mt-2 text-xl font-black text-slate-800">
+                  {formatDuration(duration)}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              <GlassButton
+                icon={Activity}
+                onClick={onFeedback}
+              >
+                Ver o meu relatório de percurso
+              </GlassButton>
+
+              <GlassButton
+                icon={XCircle}
+                variant="danger"
+                onClick={onClose}
+              >
+                Encerrar simulação
+              </GlassButton>
+            </div>
+          </div>
+        </div>
+      </main>
+    </Shell>
+  );
+}
+
+function readAllPhishingJourneyEvents() {
+  try {
+    const raw = localStorage.getItem(
+      "sicsi_simulation_events"
+    );
+
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((event) =>
+        String(
+          event?.simulation_id || ""
+        ).startsWith("phishing-")
+      )
+      .sort((a, b) => {
+        const aTime = new Date(
+          a?.timestamp || 0
+        ).getTime();
+
+        const bTime = new Date(
+          b?.timestamp || 0
+        ).getTime();
+
+        return aTime - bTime;
+      });
+  } catch {
+    return [];
+  }
+}
+
+const PHISHING_REPORT_SIMULATIONS = {
+  1: {
+    title: "Actualização necessária dos seus dados académicos",
+    shortTitle: "Email inesperado",
+  },
+
+  2: {
+    title: "Verificação urgente da conta académica",
+    shortTitle: "Falso suporte",
+  },
+
+  3: {
+    title: "Pagamento",
+    shortTitle: "Pagamento",
+  },
+
+  4: {
+    title: "Documento partilhado",
+    shortTitle: "Documento partilhado",
+  },
+
+  5: {
+    title: "Conta académica",
+    shortTitle: "Conta académica",
+  },
+};
+
+function getPhishingSimulationInfo(number) {
+  return (
+    PHISHING_REPORT_SIMULATIONS[number] || {
+      title: `Simulação ${String(
+        number || "?"
+      ).padStart(2, "0")}`,
+      shortTitle: `Simulação ${String(
+        number || "?"
+      ).padStart(2, "0")}`,
+    }
+  );
+}
+
+function getPhishingReportActionLabel(action = "") {
+  const labels = {
+    simulation_started: "Iniciou a experiência",
+
+    inspect_sender: "Verificou o remetente",
+    inspect_message: "Verificou a mensagem",
+    inspect_email: "Verificou o email",
+    inspect_url: "Verificou o endereço",
+    inspect_link: "Verificou a ligação",
+    inspect: "Inspeccionou a informação",
+
+    open_link: "Abriu a ligação",
+
+    report_email: "Reportou a mensagem",
+    report_site: "Reportou o site",
+
+    leave_page: "Saiu da página",
+    cancel: "Cancelou a operação",
+
+    archive_email: "Arquivou a mensagem",
+    delete_email: "Eliminou a mensagem",
+
+    reply_email: "Respondeu à mensagem",
+    forward_email: "Reencaminhou a mensagem",
+
+    password_entered:
+      "Introduziu uma palavra-passe",
+
+    mfa_code_entered:
+      "Introduziu um código de verificação",
+
+    submit_credentials:
+      "Submeteu dados de acesso",
+
+    confirm_payment:
+      "Confirmou um pagamento",
+
+    change_beneficiary:
+      "Alterou o beneficiário",
+
+    apply_external_configuration:
+      "Aplicou uma configuração externa",
+
+    share_external:
+      "Partilhou informação externamente",
+
+    refuse_remote_access:
+      "Recusou o acesso remoto",
+
+    reject_remote_access:
+      "Recusou o acesso remoto",
+
+    decline_remote_access:
+      "Recusou o acesso remoto",
+
+    recovery:
+      "Consultou a recuperação da conta",
+
+    open_recovery:
+      "Consultou a recuperação da conta",
+
+    verify:
+      "Verificou a informação",
+
+    verification:
+      "Iniciou uma verificação",
+
+    view_transaction:
+      "Consultou a transacção",
+
+    open_associated_attachment:
+      "Consultou o anexo",
+
+    select_download_format:
+      "Escolheu um formato",
+
+    download:
+      "Efectuou uma transferência",
+
+    return_to_account:
+      "Regressou à conta",
+
+    return_to_home:
+      "Regressou ao início",
+
+    return_to_academic_portal:
+      "Regressou ao portal académico",
+
+    alternative:
+      "Escolheu uma alternativa",
+
+    complete_simulation:
+      "Concluiu a experiência",
+
+    continue_to_simulation_02:
+      "Avançou para a Simulação 02",
+
+    continue_to_simulation_03:
+      "Avançou para a Simulação 03",
+
+    continue_to_simulation_04:
+      "Avançou para a Simulação 04",
+
+    continue_to_simulation_05:
+      "Avançou para a Simulação 05",
+
+    download_general_report:
+      "Descarregou o relatório geral",
+
+    open_general_report:
+      "Abriu o relatório geral",
+  };
+
+  if (labels[action]) {
+    return labels[action];
+  }
+
+  return String(action || "Interacção")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) =>
+      character.toUpperCase()
+    );
+}
+
+function classifyPhishingReportAction(action = "") {
+  const value = String(action)
+    .trim()
+    .toLowerCase();
+
+  const safePatterns = [
+    "inspect",
+    "verify",
+    "report",
+    "refuse",
+    "reject",
+    "decline",
+    "leave",
+    "cancel",
+    "return",
+    "back",
+    "alternative",
+    "recover",
+    "archive",
+    "delete",
+    "logout",
+    "close",
+  ];
+
+  const riskPatterns = [
+    "open_link",
+    "external",
+    "password_entered",
+    "mfa_code_entered",
+    "credential",
+    "submit",
+    "confirm_payment",
+    "beneficiary",
+    "apply_external",
+    "share_external",
+    "download",
+    "installer",
+    "activator",
+    "approve",
+    "upload",
+    "reply_email",
+    "forward_email",
+  ];
+
+  if (
+    safePatterns.some((pattern) =>
+      value.includes(pattern)
+    )
+  ) {
+    return "safe";
+  }
+
+  if (
+    riskPatterns.some((pattern) =>
+      value.includes(pattern)
+    )
+  ) {
+    return "risk";
+  }
+
+  return "neutral";
+}
+
+function getDecisionConsequence(action = "", type = "neutral") {
+  const value = String(action)
+    .trim()
+    .toLowerCase();
+
+  if (type === "safe") {
+
+    if (
+      value.includes("inspect") ||
+      value.includes("verify")
+    ) {
+      return "Ao verificar antes de avançar, reduziu a possibilidade de cair numa armadilha e protegeu os seus dados.";
+    }
+
+    if (value.includes("report")) {
+      return "Ao reportar a situação, interrompeu o risco e ajudou a sinalizar uma tentativa suspeita.";
+    }
+
+    if (
+      value.includes("refuse") ||
+      value.includes("reject") ||
+      value.includes("decline")
+    ) {
+      return "Ao recusar, evitou dar continuidade a uma acção que poderia expor a sua conta, informação ou dinheiro.";
+    }
+
+    if (
+      value.includes("cancel") ||
+      value.includes("leave")
+    ) {
+      return "Ao sair sem concluir a operação, evitou aumentar a exposição.";
+    }
+
+    return "Esta decisão reduziu a possibilidade de exposição e manteve o controlo da situação.";
+  }
+
+  if (type === "risk") {
+
+    if (
+      value.includes("password_entered") ||
+      value.includes("credential")
+    ) {
+      return "A consequência poderia ser a utilização indevida das credenciais, permitindo acesso à conta e aos dados associados.";
+    }
+
+    if (
+      value.includes("mfa_code_entered")
+    ) {
+      return "Um código de verificação entregue a terceiros poderia permitir concluir uma autenticação que não foi iniciada por si.";
+    }
+
+    if (
+      value.includes("open_link")
+    ) {
+      return "A ligação poderia conduzir a uma página falsa, recolher dados ou iniciar uma acção prejudicial.";
+    }
+
+    if (
+      value.includes("confirm_payment") ||
+      value.includes("beneficiary")
+    ) {
+      return "A consequência poderia ser uma transferência indevida, perda financeira ou alteração de quem recebe o dinheiro.";
+    }
+
+    if (
+      value.includes("external") ||
+      value.includes("share")
+    ) {
+      return "A informação poderia ficar acessível a pessoas ou serviços que não deveriam recebê-la.";
+    }
+
+    if (
+      value.includes("download") ||
+      value.includes("installer") ||
+      value.includes("activator")
+    ) {
+      return "O ficheiro poderia instalar software malicioso, comprometer o dispositivo ou permitir acesso indevido.";
+    }
+
+    if (
+      value.includes("reply") ||
+      value.includes("forward")
+    ) {
+      return "A resposta poderia confirmar que a conta está activa ou ajudar a espalhar a tentativa para outras pessoas.";
+    }
+
+    if (value.includes("submit")) {
+      return "A informação submetida poderia ser utilizada para obter acesso ou continuar a tentativa de fraude.";
+    }
+
+    return "Esta decisão aumentou a exposição e poderia facilitar uma situação de fraude ou acesso indevido.";
+  }
+
+  return "Não foi identificada uma consequência de risco directa para esta interacção.";
+}
+
+function getPersonalVulnerability(action = "") {
+  const value = String(action)
+    .trim()
+    .toLowerCase();
+
+  if (
+    value.includes("password_entered") ||
+    value.includes("credential") ||
+    value.includes("submit")
+  ) {
+    return "Confiança excessiva num pedido de autenticação.";
+  }
+
+  if (value.includes("mfa_code_entered")) {
+    return "Aceitação de um pedido de confirmação sem validar quem o iniciou.";
+  }
+
+  if (value.includes("open_link")) {
+    return "Pressa ou confiança numa ligação antes de confirmar a origem.";
+  }
+
+  if (
+    value.includes("confirm_payment") ||
+    value.includes("beneficiary")
+  ) {
+    return "Risco de agir sobre uma operação financeira sem validação independente.";
+  }
+
+  if (
+    value.includes("external") ||
+    value.includes("share")
+  ) {
+    return "Validação insuficiente antes de partilhar informação.";
+  }
+
+  if (
+    value.includes("download") ||
+    value.includes("installer") ||
+    value.includes("activator")
+  ) {
+    return "Confiança excessiva em ficheiros ou programas cuja origem pode não estar confirmada.";
+  }
+
+  if (
+    value.includes("reply") ||
+    value.includes("forward")
+  ) {
+    return "Reacção demasiado rápida perante uma mensagem potencialmente manipuladora.";
+  }
+
+  return "Necessidade de reforçar a confirmação da origem antes de avançar.";
+}
+
+function getImprovementRecommendation(action = "") {
+  const value = String(action)
+    .trim()
+    .toLowerCase();
+
+  if (
+    value.includes("password_entered") ||
+    value.includes("credential") ||
+    value.includes("submit")
+  ) {
+    return "Confirme o endereço oficial antes de iniciar sessão e nunca entregue credenciais através de pedidos inesperados.";
+  }
+
+  if (value.includes("mfa_code_entered")) {
+    return "Nunca partilhe códigos de verificação. Confirme primeiro por que motivo a autenticação foi iniciada.";
+  }
+
+  if (value.includes("open_link")) {
+    return "Pare e confirme o endereço antes de abrir uma ligação recebida por mensagem.";
+  }
+
+  if (
+    value.includes("confirm_payment") ||
+    value.includes("beneficiary")
+  ) {
+    return "Confirme beneficiário, valor e motivo da operação através de um canal independente.";
+  }
+
+  if (
+    value.includes("external") ||
+    value.includes("share")
+  ) {
+    return "Confirme quem vai receber a informação e se essa pessoa realmente precisa dela.";
+  }
+
+  if (
+    value.includes("download") ||
+    value.includes("installer") ||
+    value.includes("activator")
+  ) {
+    return "Utilize apenas fontes oficiais e confirme sempre a origem do ficheiro antes de o executar.";
+  }
+
+  if (
+    value.includes("reply") ||
+    value.includes("forward")
+  ) {
+    return "Antes de responder ou reencaminhar, confirme a origem e a intenção da mensagem.";
+  }
+
+  return "Abrande a decisão, confirme a origem e só depois avance.";
+}
+
+function formatReportTime(milliseconds = 0) {
+  const totalSeconds = Math.max(
+    0,
+    Math.round(
+      Number(milliseconds || 0) / 1000
+    )
+  );
+
+  const minutes = Math.floor(
+    totalSeconds / 60
+  );
+
+  const seconds =
+    totalSeconds % 60;
+
+  if (minutes === 0) {
+    return `${seconds}s`;
+  }
+
+  return `${minutes}m ${String(
+    seconds
+  ).padStart(2, "0")}s`;
+}
+
+function formatReportDate(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleString(
+    "pt-PT",
+    {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }
+  );
+}
+
+function buildGeneralPhishingReport(events = []) {
+
+  const simulations = [1, 2, 3, 4, 5].map(
+    (number) => {
+
+      const simulationEvents =
+        events.filter(
+          (event) =>
+            Number(
+              event?.simulation_number
+            ) === number
+        );
+
+      const safe =
+        simulationEvents.filter(
+          (event) =>
+            classifyPhishingReportAction(
+              event.action
+            ) === "safe"
+        );
+
+      const risk =
+        simulationEvents.filter(
+          (event) =>
+            classifyPhishingReportAction(
+              event.action
+            ) === "risk"
+        );
+
+      const neutral =
+        simulationEvents.filter(
+          (event) =>
+            classifyPhishingReportAction(
+              event.action
+            ) === "neutral"
+        );
+
+      const timeMs =
+        simulationEvents.reduce(
+          (total, event) =>
+            total +
+            Math.max(
+              0,
+              Number(
+                event?.duration_ms || 0
+              )
+            ),
+          0
+        );
+
+      const vulnerabilities = [];
+
+      risk.forEach((event) => {
+
+        const vulnerability =
+          getPersonalVulnerability(
+            event.action
+          );
+
+        if (
+          !vulnerabilities.includes(
+            vulnerability
+          )
+        ) {
+          vulnerabilities.push(
+            vulnerability
+          );
+        }
+      });
+
+      const recommendations = [];
+
+      risk.forEach((event) => {
+
+        const recommendation =
+          getImprovementRecommendation(
+            event.action
+          );
+
+        if (
+          !recommendations.includes(
+            recommendation
+          )
+        ) {
+          recommendations.push(
+            recommendation
+          );
+        }
+      });
+
+      return {
+        number,
+        title:
+          getPhishingSimulationInfo(
+            number
+          ).title,
+        shortTitle:
+          getPhishingSimulationInfo(
+            number
+          ).shortTitle,
+
+        events:
+          simulationEvents,
+
+        safe,
+        risk,
+        neutral,
+
+        timeMs,
+
+        vulnerabilities:
+          vulnerabilities.slice(0, 4),
+
+        recommendations:
+          recommendations.slice(0, 4),
+      };
+    }
+  );
+
+  const safeTotal =
+    simulations.reduce(
+      (total, simulation) =>
+        total +
+        simulation.safe.length,
+      0
+    );
+
+  const riskTotal =
+    simulations.reduce(
+      (total, simulation) =>
+        total +
+        simulation.risk.length,
+      0
+    );
+
+  const neutralTotal =
+    simulations.reduce(
+      (total, simulation) =>
+        total +
+        simulation.neutral.length,
+      0
+    );
+
+  const totalDuration =
+    simulations.reduce(
+      (total, simulation) =>
+        total +
+        simulation.timeMs,
+      0
+    );
+
+  return {
+    events,
+    simulations,
+    safeTotal,
+    riskTotal,
+    neutralTotal,
+    totalDuration,
+  };
+}
+
+function getOverallJourneyMessage(report) {
+
+  if (
+    report.events.length === 0
+  ) {
+    return {
+      title: "O percurso ainda não contém dados suficientes.",
+      body: "Complete as cinco experiências para obter uma análise personalizada."
+    };
+  }
+
+  if (
+    report.riskTotal === 0 &&
+    report.safeTotal > 0
+  ) {
+    return {
+      title: "O teu percurso mostra um comportamento muito cuidadoso.",
+      body: "As decisões registadas mostram preferência por verificar, recusar, sair ou reportar antes de avançar."
+    };
+  }
+
+  if (
+    report.safeTotal >=
+    report.riskTotal
+  ) {
+    return {
+      title: "O teu percurso mostra uma boa base de segurança.",
+      body: "Na maioria das situações registadas, adoptaste comportamentos protectores. Há ainda alguns pontos que merecem atenção."
+    };
+  }
+
+  return {
+    title: "O percurso mostra oportunidades claras de melhoria.",
+    body: "Existiram decisões que aumentaram a exposição. A boa notícia é que cada uma delas aponta para um comportamento concreto que pode ser melhorado."
+  };
+}
+
+function JourneyReportView({
+  events = [],
+  onBack,
+  onClose,
+  onDownload,
+}) {
+  const report =
+    buildGeneralPhishingReport(events);
+
+  const message =
+    getOverallJourneyMessage(report);
+
+  const [participant, setParticipant] =
+    useState("Participante");
+
+  useEffect(() => {
+    try {
+      const raw =
+        localStorage.getItem("sicsi_user");
+
+      if (!raw) {
+        return;
+      }
+
+      const stored =
+        JSON.parse(raw);
+
+      const name =
+        stored?.name ||
+        stored?.full_name ||
+        stored?.fullName ||
+        stored?.username ||
+        stored?.email ||
+        "";
+
+      if (name) {
+        setParticipant(String(name));
+      }
+    } catch {
+      // O relatório continua disponível.
+    }
+  }, []);
+
+  function cleanText(
+    value,
+    fallback = "Sem informação adicional."
+  ) {
+    const text = String(value ?? "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return text || fallback;
+  }
+
+  function limitText(
+    value,
+    max = 260
+  ) {
+    const text = cleanText(value);
+
+    if (text.length <= max) {
+      return text;
+    }
+
+    return `${text.slice(0, max - 1).trimEnd()}…`;
+  }
+
+  function getSimulationSummary(
+    simulation
+  ) {
+    const safeCount =
+      Array.isArray(simulation.safe)
+        ? simulation.safe.length
+        : 0;
+
+    const riskCount =
+      Array.isArray(simulation.risk)
+        ? simulation.risk.length
+        : 0;
+
+    if (
+      riskCount === 0 &&
+      safeCount > 0
+    ) {
+      return (
+        "As decisões tomadas nesta situação demonstraram capacidade de reconhecer sinais relevantes e reduzir a exposição."
+      );
+    }
+
+    if (riskCount >= 2) {
+      return (
+        "Foram identificadas escolhas com potencial para aumentar significativamente a exposição perante uma ameaça semelhante."
+      );
+    }
+
+    if (riskCount === 1) {
+      return (
+        "O percurso foi globalmente controlado, mas existiu uma escolha que poderia aumentar a exposição."
+      );
+    }
+
+    return (
+      "Esta situação apresenta comportamentos que devem ser consolidados para reduzir riscos semelhantes no futuro."
+    );
+  }
+
+  function getDecisionItems(
+    items,
+    type,
+    maximum = 2
+  ) {
+    if (!Array.isArray(items)) {
+      return [];
+    }
+
+    return items
+      .slice(0, maximum)
+      .map((event) => ({
+        title: limitText(
+          getPhishingReportActionLabel(
+            event.action
+          ),
+          120
+        ),
+        consequence: limitText(
+          getDecisionConsequence(
+            event.action,
+            type
+          ),
+          240
+        ),
+      }));
+  }
+
+  function getPotentialOutcomes(
+    simulation
+  ) {
+    const risks =
+      Array.isArray(simulation.risk)
+        ? simulation.risk
+        : [];
+
+    const outcomes = risks
+      .slice(0, 2)
+      .map((event) =>
+        limitText(
+          getDecisionConsequence(
+            event.action,
+            "risk"
+          ),
+          260
+        )
+      )
+      .filter(Boolean);
+
+    if (outcomes.length > 0) {
+      return outcomes;
+    }
+
+    return [
+      "A decisão protectora reduziu a probabilidade de comprometimento da conta, dos dados ou de outros recursos envolvidos."
+    ];
+  }
+
+  function safeList(
+    values,
+    fallback
+  ) {
+    if (!Array.isArray(values) ||
+        values.length === 0) {
+      return [fallback];
+    }
+
+    return values
+      .slice(0, 2)
+      .map((value) =>
+        limitText(value, 230)
+      );
+  }
+
+  function handleDownloadPdf() {
+    if (
+      typeof onDownload === "function"
+    ) {
+      onDownload();
+    }
+
+    const simulations =
+      Array.isArray(report.simulations)
+        ? report.simulations
+        : [];
+
+    const fixedSimulations =
+      Array.from(
+        { length: 5 },
+        (_, index) =>
+          simulations[index] || {
+            number: index + 1,
+            title:
+              `Simulação ${String(
+                index + 1
+              ).padStart(2, "0")}`,
+            safe: [],
+            risk: [],
+            vulnerabilities: [],
+            recommendations: [],
+          }
+      );
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+
+    const pageWidth =
+      doc.internal.pageSize.getWidth();
+
+    const pageHeight =
+      doc.internal.pageSize.getHeight();
+
+    const margin = 15;
+    const width =
+      pageWidth - margin * 2;
+
+    function wrap(
+      value,
+      size = 8.2
+    ) {
+      doc.setFontSize(size);
+
+      return doc.splitTextToSize(
+        cleanText(value),
+        width - 8
+      );
+    }
+
+    function heading(
+      title,
+      y,
+      dark = false
+    ) {
+      if (dark) {
+        doc.setFillColor(
+          30,
+          64,
+          175
+        );
+
+        doc.setTextColor(
+          255,
+          255,
+          255
+        );
+      }
+      else {
+        doc.setFillColor(
+          239,
+          246,
+          255
+        );
+
+        doc.setTextColor(
+          30,
+          64,
+          175
+        );
+      }
+
+      doc.roundedRect(
+        margin,
+        y,
+        width,
+        8,
+        2,
+        2,
+        "F"
+      );
+
+      doc.setFont(
+        "helvetica",
+        "bold"
+      );
+
+      doc.setFontSize(9);
+
+      doc.text(
+        title,
+        margin + 4,
+        y + 5.4
+      );
+
+      return y + 12;
+    }
+
+    function paragraph(
+      value,
+      y,
+      size = 8.2,
+      colour = [71, 85, 105]
+    ) {
+      const lines =
+        wrap(value, size);
+
+      doc.setFont(
+        "helvetica",
+        "normal"
+      );
+
+      doc.setFontSize(size);
+
+      doc.setTextColor(
+        colour[0],
+        colour[1],
+        colour[2]
+      );
+
+      doc.text(
+        lines,
+        margin + 3,
+        y
+      );
+
+      return (
+        y +
+        lines.length * 3.35 +
+        3
+      );
+    }
+
+    function decisionCard(
+      decision,
+      y,
+      safe
+    ) {
+      const titleLines =
+        wrap(
+          decision.title,
+          8.3
+        );
+
+      const consequenceLines =
+        wrap(
+          decision.consequence,
+          7.9
+        );
+
+      const height =
+        Math.max(
+          21,
+          8 +
+          titleLines.length * 2.45 +
+          consequenceLines.length * 3.15
+        );
+
+      doc.setFillColor(
+        safe ? 239 : 255,
+        safe ? 246 : 247,
+        safe ? 255 : 237
+      );
+
+      doc.setDrawColor(
+        safe ? 191 : 253,
+        safe ? 219 : 230,
+        safe ? 254 : 200
+      );
+
+      doc.roundedRect(
+        margin,
+        y,
+        width,
+        height,
+        2,
+        2,
+        "FD"
+      );
+
+      doc.setFont(
+        "helvetica",
+        "bold"
+      );
+
+      doc.setFontSize(8.3);
+
+      doc.setTextColor(
+        safe ? 30 : 154,
+        safe ? 64 : 52,
+        safe ? 175 : 18
+      );
+
+      doc.text(
+        titleLines,
+        margin + 4,
+        y + 3.8
+      );
+
+      doc.setFont(
+        "helvetica",
+        "normal"
+      );
+
+      doc.setFontSize( 7.1);
+
+      doc.setTextColor(
+        71,
+        85,
+        105
+      );
+
+      doc.text(
+        consequenceLines,
+        margin + 4,
+        y +
+          5 +
+          titleLines.length * 2.45 +
+          2
+      );
+
+      return y + height + 1.2;
+    }
+
+    function simpleCard(
+      value,
+      y,
+      mode = "neutral"
+    ) {
+      const lines =
+        wrap(value, 7.2);
+
+      const height =
+        Math.max(9.5,
+          lines.length * 2.45 + 4.5
+        );
+
+      if (mode === "risk") {
+        doc.setFillColor(
+          255,
+          247,
+          237
+        );
+      }
+      else if (mode === "outcome") {
+        doc.setFillColor(
+          254,
+          242,
+          242
+        );
+      }
+      else {
+        doc.setFillColor(
+          248,
+          250,
+          252
+        );
+      }
+
+      doc.setDrawColor(
+        226,
+        232,
+        240
+      );
+
+      doc.roundedRect(
+        margin,
+        y,
+        width,
+        height,
+        2,
+        2,
+        "FD"
+      );
+
+      doc.setFont(
+        "helvetica",
+        "normal"
+      );
+
+      doc.setFontSize( 7.2);
+
+      doc.setTextColor(
+        71,
+        85,
+        105
+      );
+
+      doc.text(
+        lines,
+        margin + 4,
+        y + 5
+      );
+
+      return y + height + 1.2;
+    }
+
+    fixedSimulations.forEach(
+      (simulation, index) => {
+
+        if (index > 0) {
+          doc.addPage();
+        }
+
+        let y = 8;
+
+        doc.setFillColor(
+          30,
+          64,
+          175
+        );
+
+        doc.roundedRect(
+          margin,
+          y,
+          width,
+          27,
+          3,
+          3,
+          "F"
+        );
+
+        doc.setFont(
+          "helvetica",
+          "bold"
+        );
+
+        doc.setTextColor(
+          219,
+          234,
+          254
+        );
+
+        doc.setFontSize(7);
+
+        doc.text(
+          "SICSI · SEGURANÇA DA INFORMAÇÃO",
+          margin + 5,
+          y + 6
+        );
+
+        doc.setFontSize(15);
+
+        doc.setTextColor(
+          255,
+          255,
+          255
+        );
+
+        doc.text(
+          `Simulação ${String(
+            simulation.number
+          ).padStart(2, "0")} · ${cleanText(
+            simulation.title,
+            "Experiência de Phishing"
+          )}`,
+          margin + 5,
+          y + 14.5
+        );
+
+        doc.setFontSize(7);
+
+        doc.setTextColor(
+          219,
+          234,
+          254
+        );
+
+        doc.text(
+          `Participante: ${limitText(
+            participant,
+            90
+          )}`,
+          margin + 5,
+          y + 22
+        );
+
+        y += 34;
+
+        y = heading(
+          "Resumo da situação",
+          y,
+          true
+        );
+
+        y = paragraph(
+          getSimulationSummary(
+            simulation
+          ),
+          y,
+          8.3,
+          [51, 65, 85]
+        );
+
+        const safeDecisions =
+          getDecisionItems(
+            simulation.safe,
+            "safe"
+          );
+
+        const riskDecisions =
+          getDecisionItems(
+            simulation.risk,
+            "risk"
+          );
+
+        y = heading(
+          "Decisões certas",
+          y
+        );
+
+        if (
+          safeDecisions.length > 0
+        ) {
+          safeDecisions.forEach(
+            (decision) => {
+              y = decisionCard(
+                decision,
+                y,
+                true
+              );
+            }
+          );
+        }
+        else {
+          y = simpleCard(
+            "Não foram identificadas decisões claramente protectoras para destacar nesta etapa.",
+            y
+          );
+        }
+
+        y = heading(
+          "Decisões e exposições",
+          y
+        );
+
+        if (
+          riskDecisions.length > 0
+        ) {
+          riskDecisions.forEach(
+            (decision) => {
+              y = decisionCard(
+                decision,
+                y,
+                false
+              );
+            }
+          );
+        }
+        else {
+          y = simpleCard(
+            "Não foram identificadas exposições relevantes para destacar nesta etapa.",
+            y
+          );
+        }
+
+        y = heading(
+          "O que poderia ter acontecido",
+          y
+        );
+
+        getPotentialOutcomes(
+          simulation
+        )
+          .slice(0, 2)
+          .forEach((outcome) => {
+            y = simpleCard(
+              outcome,
+              y,
+              "outcome"
+            );
+          });
+
+        y = heading(
+          "Vulnerabilidades pessoais",
+          y
+        );
+
+        safeList(
+          simulation.vulnerabilities,
+          "Não foram identificadas vulnerabilidades pessoais relevantes nesta etapa."
+        )
+          .slice(0, 2)
+          .forEach((item) => {
+            y = simpleCard(
+              item,
+              y
+            );
+          });
+
+        y = heading(
+          "Melhorias e recomendações",
+          y
+        );
+
+        safeList(
+          simulation.recommendations,
+          "Continue a confirmar a origem das solicitações antes de agir."
+        )
+          .slice(0, 2)
+          .forEach((item) => {
+            y = simpleCard(
+              item,
+              y
+            );
+          });
+
+        doc.setDrawColor(
+          226,
+          232,
+          240
+        );
+
+        doc.line(
+          margin,
+          pageHeight - 13,
+          pageWidth - margin,
+          pageHeight - 13
+        );
+
+        doc.setFont(
+          "helvetica",
+          "normal"
+        );
+
+        doc.setFontSize(7);
+
+        doc.setTextColor(
+          100,
+          116,
+          139
+        );
+
+        doc.text(
+          "SICSI III · Relatório individual da jornada de Phishing",
+          margin,
+          pageHeight - 7
+        );
+
+        doc.text(
+          `${index + 1} / 5`,
+          pageWidth - margin,
+          pageHeight - 7,
+          {
+            align: "right",
+          }
+        );
+      }
+    );
+
+    doc.save(
+      "relatorio-phishing-sicsi-iii.pdf"
+    );
+  }
+
+  function handleFinish() {
+    try {
+      if (
+        typeof onClose === "function"
+      ) {
+        onClose();
+        return;
+      }
+    } catch {
+      // A navegação continua.
+    }
+
+    if (
+      typeof onBack === "function"
+    ) {
+      onBack();
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
+
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+
+            <div>
+
+              <div className="text-xs font-black uppercase tracking-[0.2em] text-blue-700">
+                SICSI · Phishing
+              </div>
+
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900">
+                Relatório geral do meu percurso
+              </h1>
+
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-500">
+                Uma análise clara das decisões mais importantes nas cinco experiências, centrada no risco, nas vulnerabilidades e no que pode ser melhorado.
+              </p>
+
+              <div className="mt-4 inline-flex items-center rounded-xl border border-blue-100 bg-blue-50 px-4 py-2">
+                <span className="text-xs font-black uppercase tracking-wide text-blue-700">
+                  Participante
+                </span>
+
+                <span className="ml-2 text-sm font-bold text-slate-800">
+                  {participant}
+                </span>
+              </div>
+
+            </div>
+
+            <div className="rounded-2xl bg-blue-50 px-5 py-4">
+              <div className="text-xs font-black uppercase tracking-wide text-blue-700">
+                Percurso
+              </div>
+
+              <div className="mt-1 text-lg font-black text-slate-900">
+                01 → 02 → 03 → 04 → 05
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+
+        <section className="rounded-3xl bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 p-7 text-white shadow-xl sm:p-9">
+
+          <div className="max-w-4xl">
+
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-blue-100">
+              Visão geral
+            </div>
+
+            <h2 className="mt-2 text-2xl font-black sm:text-3xl">
+              {message.title}
+            </h2>
+
+            <p className="mt-3 text-sm leading-7 text-blue-50">
+              {message.body}
+            </p>
+
+          </div>
+
+        </section>
+
+        <section className="mt-8 space-y-6">
+
+          {report.simulations.map(
+            (simulation) => {
+
+              const safeDecisions =
+                getDecisionItems(
+                  simulation.safe,
+                  "safe"
+                );
+
+              const riskDecisions =
+                getDecisionItems(
+                  simulation.risk,
+                  "risk"
+                );
+
+              const outcomes =
+                getPotentialOutcomes(
+                  simulation
+                );
+
+              return (
+                <article
+                  key={simulation.number}
+                  className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+                >
+
+                  <div className="bg-gradient-to-r from-blue-50 via-white to-white px-6 py-6 sm:px-8">
+
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">
+                      Simulação{" "}
+                      {String(
+                        simulation.number
+                      ).padStart(2, "0")}
+                    </div>
+
+                    <h2 className="mt-1 text-2xl font-black text-slate-900">
+                      {simulation.title}
+                    </h2>
+
+                    <p className="mt-2 max-w-4xl text-sm leading-7 text-slate-600">
+                      {getSimulationSummary(
+                        simulation
+                      )}
+                    </p>
+
+                  </div>
+
+                  <div className="grid gap-5 p-6 sm:p-8 lg:grid-cols-2">
+
+                    <section>
+
+                      <h3 className="text-sm font-black uppercase tracking-wide text-blue-800">
+                        Decisões certas
+                      </h3>
+
+                      <div className="mt-4 space-y-3">
+
+                        {safeDecisions.length > 0 ? (
+                          safeDecisions.map(
+                            (
+                              decision,
+                              index
+                            ) => (
+                              <div
+                                key={`safe-${simulation.number}-${index}`}
+                                className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4"
+                              >
+                                <div className="font-bold text-slate-800">
+                                  {decision.title}
+                                </div>
+
+                                <p className="mt-2 text-sm leading-6 text-slate-600">
+                                  {decision.consequence}
+                                </p>
+                              </div>
+                            )
+                          )
+                        ) : (
+                          <div className="rounded-2xl bg-slate-50 p-5 text-sm leading-6 text-slate-500">
+                            Não foram identificadas decisões claramente protectoras para destacar nesta etapa.
+                          </div>
+                        )}
+
+                      </div>
+
+                    </section>
+
+                    <section>
+
+                      <h3 className="text-sm font-black uppercase tracking-wide text-amber-800">
+                        Decisões e exposições
+                      </h3>
+
+                      <div className="mt-4 space-y-3">
+
+                        {riskDecisions.length > 0 ? (
+                          riskDecisions.map(
+                            (
+                              decision,
+                              index
+                            ) => (
+                              <div
+                                key={`risk-${simulation.number}-${index}`}
+                                className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4"
+                              >
+                                <div className="font-bold text-slate-800">
+                                  {decision.title}
+                                </div>
+
+                                <p className="mt-2 text-sm leading-6 text-slate-600">
+                                  {decision.consequence}
+                                </p>
+                              </div>
+                            )
+                          )
+                        ) : (
+                          <div className="rounded-2xl bg-blue-50 p-5 text-sm leading-6 text-blue-900/70">
+                            Não foram identificadas exposições relevantes para destacar nesta etapa.
+                          </div>
+                        )}
+
+                      </div>
+
+                    </section>
+
+                  </div>
+
+                  <div className="grid gap-5 border-t border-slate-100 p-6 sm:p-8 lg:grid-cols-3">
+
+                    <section>
+
+                      <h3 className="text-sm font-black uppercase tracking-wide text-red-700">
+                        O que poderia ter acontecido
+                      </h3>
+
+                      <div className="mt-4 space-y-3">
+
+                        {outcomes
+                          .slice(0, 2)
+                          .map(
+                            (
+                              outcome,
+                              index
+                            ) => (
+                              <div
+                                key={`outcome-${simulation.number}-${index}`}
+                                className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm leading-6 text-slate-700"
+                              >
+                                {outcome}
+                              </div>
+                            )
+                          )}
+
+                      </div>
+
+                    </section>
+
+                    <section>
+
+                      <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">
+                        Vulnerabilidades pessoais
+                      </h3>
+
+                      <div className="mt-4 space-y-3">
+
+                        {safeList(
+                          simulation.vulnerabilities,
+                          "Não foram identificadas vulnerabilidades pessoais relevantes nesta etapa."
+                        )
+                          .slice(0, 2)
+                          .map(
+                            (
+                              vulnerability
+                            ) => (
+                              <div
+                                key={vulnerability}
+                                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600"
+                              >
+                                {vulnerability}
+                              </div>
+                            )
+                          )}
+
+                      </div>
+
+                    </section>
+
+                    <section>
+
+                      <h3 className="text-sm font-black uppercase tracking-wide text-blue-800">
+                        Melhorias e recomendações
+                      </h3>
+
+                      <div className="mt-4 space-y-3">
+
+                        {safeList(
+                          simulation.recommendations,
+                          "Continue a confirmar a origem das solicitações antes de agir."
+                        )
+                          .slice(0, 2)
+                          .map(
+                            (
+                              recommendation
+                            ) => (
+                              <div
+                                key={recommendation}
+                                className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-slate-700"
+                              >
+                                {recommendation}
+                              </div>
+                            )
+                          )}
+
+                      </div>
+
+                    </section>
+
+                  </div>
+
+                </article>
+              );
+            }
+          )}
+
+        </section>
+
+        <section className="mt-8 rounded-3xl bg-gradient-to-br from-blue-900 via-blue-800 to-blue-600 p-7 text-white shadow-xl sm:p-9">
+
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-blue-100">
+            Fecho do percurso
+          </div>
+
+          <h2 className="mt-2 text-2xl font-black">
+            O teu relatório está pronto.
+          </h2>
+
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-blue-50">
+            O relatório apresenta apenas a análise essencial das cinco simulações. Os dados técnicos utilizados pelo sistema permanecem internos e palavras-passe ou códigos secretos não são apresentados.
+          </p>
+
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="rounded-xl bg-white px-5 py-3 text-sm font-black text-blue-800 transition hover:bg-blue-50"
+            >
+              Descarregar relatório em PDF
+            </button>
+
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-black text-white backdrop-blur-sm transition hover:bg-white/20"
+            >
+              Voltar ao percurso
+            </button>
+
+            <button
+              type="button"
+              onClick={handleFinish}
+              className="rounded-xl border border-white/30 bg-transparent px-5 py-3 text-sm font-black text-white transition hover:bg-white/10"
+            >
+              Encerrar simulação
+            </button>
+
+          </div>
+
+        </section>
+
+      </main>
+    </div>
+  );
+}
+
+export default function Phishing05Page() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const accountEmail = getAccountEmail(user);
+
+  const [state, setState] = useState(STATES.HOME);
+  const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [events, setEvents] = useState([]);
+  const [startedAt, setStartedAt] = useState(Date.now());
+  const [elapsed, setElapsed] = useState(0);
+  const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    const current = getCurrentSimulation();
+
+    if (
+      current &&
+      current.simulation_id === SIMULATION.id &&
+      !current.completed
+    ) {
+      setStartedAt(
+        current.started_at
+          ? new Date(current.started_at).getTime()
+          : Date.now()
+      );
+    } else {
+      const session = startSimulation({
+        area: SIMULATION.area,
+        simulationId: SIMULATION.id,
+        simulationNumber: SIMULATION.number,
+        initialState: STATES.HOME,
+      });
+
+      setStartedAt(
+        session?.started_at
+          ? new Date(session.started_at).getTime()
+          : Date.now()
+      );
+
+      registerAction({
+        action: "simulation_started",
+        nextState: STATES.HOME,
+        interactionType: "system",
+        metadata: {
+          simulation_id: SIMULATION.id,
+          simulation_number: SIMULATION.number,
+          title: SIMULATION.title,
+        },
+      });
+    }
+
+    setSessionReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sessionReady) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setElapsed(Date.now() - startedAt);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [sessionReady, startedAt]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const stored = JSON.parse(
+          localStorage.getItem("sicsi_simulation_events") || "[]"
+        );
+
+        const session = getCurrentSimulation();
+
+        if (session?.session_id) {
+          setEvents(
+            stored.filter(
+              (event) => event.session_id === session.session_id
+            )
+          );
+        }
+      } catch {
+        setEvents([]);
+      }
+    }, 50);
+
+    return () => window.clearTimeout(timer);
+  }, [state]);
+
+  function track(action, nextState, interactionType = "interaction", metadata = {}) {
+    const result = registerAction({
+      action,
+      nextState,
+      interactionType,
+      metadata,
+    });
+
+    if (result?.event) {
+      setEvents((current) => [...current, result.event]);
+    }
+
+    return result;
+  }
+
+  function go(nextState, action, metadata = {}) {
+    track(action, nextState, "navigation", metadata);
+    setState(nextState);
+  }
+
+  function openLogin() {
+    go(STATES.LOGIN, "open_academic_login");
+  }
+
+  function openSecurity() {
+    go(STATES.SECURITY_NOTICE, "open_account_security");
+  }
+
+  function openActivity() {
+    go(STATES.ACTIVITY, "open_account_activity");
+  }
+
+  function submitLogin() {
+    track(
+      "submit_academic_credentials",
+      STATES.LOGIN_PROCESSING,
+      "form_submit",
+      {
+        account: accountEmail,
+        password_entered: Boolean(password),
+      }
+    );
+
+    setPassword("");
+    setState(STATES.LOGIN_PROCESSING);
+
+    window.setTimeout(() => {
+      track(
+        "authentication_challenge_requested",
+        STATES.MFA,
+        "system",
+        {
+          challenge_type: "mfa",
+        }
+      );
+
+      setState(STATES.MFA);
+    }, 650);
+  }
+
+  function continueMfa() {
+    track(
+      "submit_mfa_challenge",
+      STATES.ACCOUNT_HOME,
+      "form_submit",
+      {
+        mfa_code_entered: Boolean(mfaCode),
+        secret_stored: false,
+      }
+    );
+
+    setMfaCode("");
+    setState(STATES.ACCOUNT_HOME);
+  }
+
+  function useAlternativeMfa() {
+    track(
+      "select_alternative_mfa_method",
+      STATES.RECOVERY,
+      "selection",
+      {
+        method: "account_recovery",
+      }
+    );
+
+    setMfaCode("");
+    setState(STATES.RECOVERY);
+  }
+
+  function openAccountActivity() {
+    go(STATES.ACTIVITY, "open_account_activity_from_session");
+  }
+
+  function openDevices() {
+    go(STATES.DEVICES, "open_account_devices");
+  }
+
+  function openRecovery() {
+    go(STATES.RECOVERY, "open_account_recovery");
+  }
+
+  function openSessionDetail() {
+    go(STATES.SESSION_DETAIL, "open_current_session");
+  }
+
+  function continueRecovery() {
+    track(
+      "select_account_recovery_option",
+      STATES.SECURITY_RESULT,
+      "selection",
+      {
+        method: "institutional_recovery",
+      }
+    );
+
+    setState(STATES.SECURITY_RESULT);
+  }
+
+  function continueSecurityNotice() {
+    go(STATES.ACCOUNT_HOME, "continue_security_review");
+  }
+
+  function continueSessionSecurity() {
+    track(
+      "review_current_session_security",
+      STATES.SECURITY_RESULT,
+      "interaction",
+      {
+        session_reviewed: true,
+      }
+    );
+
+    setState(STATES.SECURITY_RESULT);
+  }
+  function openFeedback() {
+    registerAction({
+      action: "finish_simulation_and_view_journey",
+      nextState: STATES.FEEDBACK,
+      interactionType: "navigation",
+      metadata: {
+        source: "phishing-05",
+        destination: "journey-report",
+      },
+    });
+
+    completeSimulation();
+
+    setState(STATES.FEEDBACK);
+  }
+
+  function getCurrentEvents() {
+    try {
+      const stored = JSON.parse(
+        localStorage.getItem("sicsi_simulation_events") || "[]"
+      );
+
+      const session = getCurrentSimulation();
+
+      if (!session?.session_id) {
+        return [];
+      }
+
+      return stored.filter(
+        (event) => event.session_id === session.session_id
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  function completeAndClose() {
+    track(
+      "end_simulation",
+      STATES.COMPLETED,
+      "navigation",
+      {
+        destination: "/student/simulacoes",
+      }
+    );
+
+    completeSimulation();
+    completeSimulationSession();
+
+    setState(STATES.COMPLETED);
+  }
+
+  function closeFromCompleted() {
+    const session = getCurrentSimulation();
+
+    if (session?.session_id) {
+      clearSessionEvents(session.session_id);
+    }
+
+    navigate("/student/simulacoes");
+  }
+
+  function returnToAccount() {
+    track(
+      "return_to_account",
+      STATES.ACCOUNT_HOME,
+      "navigation"
+    );
+
+    setState(STATES.ACCOUNT_HOME);
+  }
+
+  function returnToHome() {
+    track(
+      "return_to_academic_portal",
+      STATES.HOME,
+      "navigation"
+    );
+
+    setState(STATES.HOME);
+  }
+
+  function renderState() {
+    if (state === STATES.HOME) {
+      return (
+        <AcademicHome
+          account={accountEmail}
+          onLogin={openLogin}
+          onSecurity={openSecurity}
+          onActivity={openActivity}
+        />
+      );
+    }
+
+    if (state === STATES.LOGIN) {
+      return (
+        <LoginView
+          account={accountEmail}
+          password={password}
+          setPassword={setPassword}
+          onSubmit={submitLogin}
+          onBack={returnToHome}
+          onRecovery={openRecovery}
+        />
+      );
+    }
+
+    if (state === STATES.LOGIN_PROCESSING) {
+      return <LoginProcessingView />;
+    }
+
+    if (state === STATES.MFA) {
+      return (
+        <MfaView
+          code={mfaCode}
+          setCode={setMfaCode}
+          onContinue={continueMfa}
+          onBack={() => {
+            track(
+              "return_to_login_from_mfa",
+              STATES.LOGIN,
+              "navigation"
+            );
+
+            setState(STATES.LOGIN);
+          }}
+          onAlternative={useAlternativeMfa}
+        />
+      );
+    }
+
+    if (state === STATES.SECURITY_NOTICE) {
+      return (
+        <SecurityNoticeView
+          onContinue={continueSecurityNotice}
+          onBack={returnToHome}
+        />
+      );
+    }
+
+    if (state === STATES.ACCOUNT_HOME) {
+      return (
+        <AccountHomeView
+          account={accountEmail}
+          onActivity={openAccountActivity}
+          onDevices={openDevices}
+          onRecovery={openRecovery}
+          onFinish={openFeedback}
+        />
+      );
+    }
+
+    if (state === STATES.ACTIVITY) {
+      return (
+        <ActivityView
+          onBack={returnToAccount}
+          onSession={openSessionDetail}
+        />
+      );
+    }
+
+    if (state === STATES.DEVICES) {
+      return (
+        <DevicesView
+          onBack={returnToAccount}
+          onSession={openSessionDetail}
+          onRecovery={openRecovery}
+        />
+      );
+    }
+
+    if (state === STATES.RECOVERY) {
+      return (
+        <RecoveryView
+          onBack={returnToAccount}
+          onContinue={continueRecovery}
+        />
+      );
+    }
+
+    if (state === STATES.SESSION_DETAIL) {
+      return (
+        <SessionDetailView
+          onBack={returnToAccount}
+          onSecurity={continueSessionSecurity}
+        />
+      );
+    }
+
+    if (state === STATES.SECURITY_RESULT) {
+      return (
+        <SecurityResultView
+          onBack={returnToAccount}
+          onFeedback={openFeedback}
+        />
+      );
+    }
+
+    if (state === STATES.FEEDBACK) {
+      return (
+        <JourneyReportView
+          events={readAllPhishingJourneyEvents()}
+          onBack={returnToAccount}
+          onClose={completeAndClose}
+          onDownload={() => {
+            registerAction({
+              action: "download_general_report",
+              nextState: STATES.FEEDBACK,
+              interactionType: "download",
+              metadata: {
+                format: "html",
+              },
+            });
+          }}
+        />
+      );
+    }
+
+    if (state === STATES.COMPLETED) {
+      return (
+        <CompletedView
+          events={getCurrentEvents()}
+          duration={elapsed}
+          onFeedback={() => {
+            const currentEvents = getCurrentEvents();
+
+            track(
+              "open_general_report",
+              STATES.FEEDBACK,
+              "navigation",
+              {
+                event_count: currentEvents.length,
+              }
+            );
+
+            setState(STATES.FEEDBACK);
+          }}
+          onClose={closeFromCompleted}
+        />
+      );
+    }
+
+    return (
+      <AcademicHome
+        account={accountEmail}
+        onLogin={openLogin}
+        onSecurity={openSecurity}
+        onActivity={openActivity}
+      />
+    );
+  }
+
+  if (!sessionReady) {
+    return (
+      <Shell title="Conta académica">
+        <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
+          <div className="text-center">
+            <RefreshCw
+              size={25}
+              className="mx-auto animate-spin text-blue-700"
+            />
+            <div className="mt-4 text-sm font-semibold text-slate-500">
+              A preparar a simulação...
+            </div>
+          </div>
+        </main>
+      </Shell>
+    );
+  }
+
+  return renderState();
+}
+
+

@@ -1,0 +1,2521 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  BookOpen,
+  Check,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Edit3,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  FileQuestion,
+  Film,
+  Link2,
+  LoaderCircle,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Trash2,
+  X,
+} from "lucide-react";
+
+const API_BASE =
+  "http://127.0.0.1:8000/api/course-admin";
+
+const TOTAL_PERGUNTAS = 10;
+const TOTAL_OPCOES = 4;
+
+const CURSOS_VISUAIS = [
+  "from-blue-950 via-blue-800 to-cyan-500",
+  "from-indigo-950 via-violet-800 to-fuchsia-500",
+  "from-red-950 via-rose-800 to-orange-500",
+  "from-emerald-950 via-green-800 to-teal-500",
+];
+
+function perguntaVazia() {
+  return {
+    id: "",
+    question: "",
+    options: ["", "", "", ""],
+    correct_answer: 0,
+  };
+}
+
+function videoVazio() {
+  return {
+    id: "",
+    title: "",
+    description: "",
+    link: "",
+  };
+}
+
+function perguntasVazias() {
+  return Array.from(
+    { length: TOTAL_PERGUNTAS },
+    () => perguntaVazia()
+  );
+}
+
+function textoDaOpcao(opcao) {
+  if (
+    opcao &&
+    typeof opcao === "object"
+  ) {
+    return String(
+      opcao.text ??
+        opcao.label ??
+        opcao.title ??
+        opcao.value ??
+        opcao.name ??
+        ""
+    );
+  }
+
+  return String(
+    opcao ?? ""
+  );
+}
+
+function criarPergunta() {
+  return perguntaVazia();
+}
+
+function normalizarPerguntas(perguntas) {
+  const origem =
+    Array.isArray(perguntas)
+      ? perguntas
+      : [];
+
+  return Array.from(
+    {
+      length:
+        TOTAL_PERGUNTAS,
+    },
+    (_, index) => {
+      const item =
+        origem[index];
+
+      if (!item) {
+        return criarPergunta();
+      }
+
+      const options =
+        Array.isArray(
+          item.options
+        )
+          ? item.options.map(
+              (opcao) =>
+                textoDaOpcao(
+                  opcao
+                )
+            )
+          : [];
+
+      while (
+        options.length <
+        TOTAL_OPCOES
+      ) {
+        options.push("");
+      }
+
+      return {
+        id: String(
+          item.id || ""
+        ),
+        question: String(
+          item.question ||
+            ""
+        ),
+        options:
+          options.slice(
+            0,
+            TOTAL_OPCOES
+          ),
+        correct_answer:
+          Number.isInteger(
+            Number(
+              item.correct_answer
+            )
+          )
+            ? Number(
+                item.correct_answer
+              )
+            : 0,
+      };
+    }
+  );
+}
+function normalizarVideos(
+  lista
+) {
+  return Array.isArray(
+    lista
+  )
+    ? lista.map((video) => ({
+        id: String(
+          video?.id || ""
+        ),
+        title: String(
+          video?.title || ""
+        ),
+        description:
+          String(
+            video?.description ||
+              ""
+          ),
+        link: String(
+          video?.link || ""
+        ),
+      }))
+    : [];
+}
+
+function erroAPI(
+  dados,
+  fallback
+) {
+  if (
+    typeof dados?.detail ===
+    "string"
+  ) {
+    return dados.detail;
+  }
+
+  if (
+    Array.isArray(
+      dados?.detail
+    )
+  ) {
+    return dados.detail
+      .map(
+        (item) =>
+          item?.msg
+      )
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return fallback;
+}
+
+function visualCurso(index) {
+  return (
+    CURSOS_VISUAIS[
+      index % CURSOS_VISUAIS.length
+    ]
+  );
+}
+
+function Modal({
+  title,
+  subtitle,
+  children,
+  onClose,
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <div className="max-h-[80vh] w-full max-w-[920px] overflow-hidden rounded-[24px] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.22)]">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <div className="flex items-center gap-2 text-blue-600">
+              <ShieldCheck
+                size={16}
+              />
+
+              <span className="text-[10px] font-black uppercase tracking-[0.16em]">
+                SICSI III · Administração
+              </span>
+            </div>
+
+            <h2 className="mt-1 text-lg font-black text-slate-950">
+              {title}
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-500">
+              {subtitle}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <X size={19} />
+          </button>
+        </div>
+
+        <div className="max-h-[calc(80vh-82px)] overflow-y-auto overscroll-contain">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Campo({
+  label,
+  value,
+  onChange,
+  placeholder,
+  textarea = false,
+}) {
+  const Elemento =
+    textarea
+      ? "textarea"
+      : "input";
+
+  return (
+    <label className="block">
+      <span className="text-[11px] font-black uppercase tracking-[0.13em] text-slate-500">
+        {label}
+      </span>
+
+      <Elemento
+        value={value}
+        onChange={(event) =>
+          onChange(
+            event.target.value
+          )
+        }
+        placeholder={
+          placeholder
+        }
+        rows={
+          textarea
+            ? 5
+            : undefined
+        }
+        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold !text-slate-900 placeholder:text-slate-400 caret-blue-600 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+        style={{
+          color: "#0f172a",
+          WebkitTextFillColor:
+            "#0f172a",
+        }}
+      />
+    </label>
+  );
+}
+
+function Acao({
+  icon: Icon,
+  children,
+  onClick,
+  danger = false,
+  primary = false,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-black transition-all duration-200 ${
+        primary
+          ? "bg-blue-600 text-white shadow-md shadow-blue-600/20 hover:-translate-y-0.5 hover:bg-blue-700"
+          : danger
+            ? "border border-red-100 bg-red-50 text-red-600 hover:-translate-y-0.5 hover:bg-red-100"
+            : "border border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+      }`}
+    >
+      <Icon
+        size={14}
+        className="transition-transform group-hover:scale-110"
+      />
+      {children}
+    </button>
+  );
+}
+
+function StatusBadge({
+  publicado,
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black shadow-sm ${
+        publicado
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-amber-100 text-amber-700"
+      }`}
+    >
+      {publicado ? (
+        <Eye size={13} />
+      ) : (
+        <EyeOff
+          size={13}
+        />
+      )}
+
+      {publicado
+        ? "Publicado"
+        : "Rascunho"}
+    </span>
+  );
+}
+
+function CursoModal({
+  curso,
+  onClose,
+  onSaved,
+}) {
+  const editar =
+    Boolean(curso);
+
+  const [titulo, setTitulo] =
+    useState(
+      curso?.title || ""
+    );
+
+  const [descricao, setDescricao] =
+    useState(
+      curso?.description || ""
+    );
+
+  const [link, setLink] =
+    useState(
+      curso?.link || ""
+    );
+
+  const [publicado, setPublicado] =
+    useState(
+      curso?.published !== false
+    );
+
+  const [videos, setVideos] =
+    useState(
+      normalizarVideos(
+        curso?.videos
+      )
+    );
+
+  const [perguntas, setPerguntas] =
+    useState(
+      normalizarPerguntas(
+        curso?.questions
+      )
+    );
+
+  const [aba, setAba] =
+    useState("dados");
+
+  const [erro, setErro] =
+    useState("");
+
+  const [saving, setSaving] =
+    useState(false);
+
+  function atualizarVideo(
+    index,
+    campo,
+    valor
+  ) {
+    setVideos((actual) =>
+      actual.map(
+        (video, i) =>
+          i === index
+            ? {
+                ...video,
+                [campo]:
+                  valor,
+              }
+            : video
+      )
+    );
+  }
+
+  function adicionarVideo() {
+    setVideos((actual) => [
+      ...actual,
+      videoVazio(),
+    ]);
+
+    setAba("videos");
+    setErro("");
+  }
+
+  function removerVideo(
+    index
+  ) {
+    setVideos((actual) =>
+      actual.filter(
+        (_, i) =>
+          i !== index
+      )
+    );
+  }
+
+  function atualizarPergunta(
+    index,
+    campo,
+    valor
+  ) {
+    setPerguntas((actual) =>
+      actual.map(
+        (item, i) =>
+          i === index
+            ? {
+                ...item,
+                [campo]:
+                  valor,
+              }
+            : item
+      )
+    );
+  }
+
+  function atualizarOpcao(
+    perguntaIndex,
+    opcaoIndex,
+    valor
+  ) {
+    setPerguntas((actual) =>
+      actual.map(
+        (item, i) => {
+          if (
+            i !==
+            perguntaIndex
+          ) {
+            return item;
+          }
+
+          return {
+            ...item,
+            options:
+              item.options.map(
+                (
+                  opcao,
+                  oi
+                ) =>
+                  oi ===
+                  opcaoIndex
+                    ? valor
+                    : opcao
+              ),
+          };
+        }
+      )
+    );
+  }
+
+  function validarCurso() {
+    if (!titulo.trim()) {
+      return "O título do curso é obrigatório.";
+    }
+
+    if (!descricao.trim()) {
+      return "A descrição do curso é obrigatória.";
+    }
+
+    if (!link.trim()) {
+      return "O link do curso é obrigatório.";
+    }
+
+    if (
+      !/^https?:\/\//i.test(
+        link.trim()
+      )
+    ) {
+      return "O link do curso deve começar por http:// ou https://.";
+    }
+
+    return "";
+  }
+
+  function validarVideos() {
+    for (
+      let i = 0;
+      i < videos.length;
+      i += 1
+    ) {
+      const video =
+        videos[i];
+
+      if (!video.title.trim()) {
+        return `O título do vídeo ${i + 1} é obrigatório.`;
+      }
+
+      if (!video.description.trim()) {
+        return `A descrição do vídeo ${i + 1} é obrigatória.`;
+      }
+
+      if (!video.link.trim()) {
+        return `O link do vídeo ${i + 1} é obrigatório.`;
+      }
+
+      if (
+        !/^https?:\/\//i.test(
+          video.link.trim()
+        )
+      ) {
+        return `O link do vídeo ${i + 1} deve começar por http:// ou https://.`;
+      }
+    }
+
+    return "";
+  }
+
+  function validarPerguntas() {
+    if (
+      perguntas.length !==
+      TOTAL_PERGUNTAS
+    ) {
+      return "O curso deve possuir exactamente 10 perguntas.";
+    }
+
+    for (
+      let i = 0;
+      i < TOTAL_PERGUNTAS;
+      i += 1
+    ) {
+      const pergunta =
+        perguntas[i];
+
+      if (
+        !pergunta.question.trim()
+      ) {
+        return `A pergunta ${i + 1} está vazia.`;
+      }
+
+      if (
+        pergunta.options.length !==
+        TOTAL_OPCOES
+      ) {
+        return `A pergunta ${i + 1} deve possuir 4 opções.`;
+      }
+
+      for (
+        let j = 0;
+        j < TOTAL_OPCOES;
+        j += 1
+      ) {
+        if (
+          !String(
+            pergunta.options[j] ||
+              ""
+          ).trim()
+        ) {
+          return `A opção ${j + 1} da pergunta ${i + 1} está vazia.`;
+        }
+      }
+
+      if (
+        Number(
+          pergunta.correct_answer
+        ) < 0 ||
+        Number(
+          pergunta.correct_answer
+        ) > 3
+      ) {
+        return `Seleccione a resposta correcta da pergunta ${i + 1}.`;
+      }
+    }
+
+    return "";
+  }
+
+  function validarETestaAba(
+    destino
+  ) {
+    const cursoErro =
+      validarCurso();
+
+    if (cursoErro) {
+      setErro(cursoErro);
+      setAba("dados");
+      return;
+    }
+
+    if (destino === "videos") {
+      const videoErro =
+        validarVideos();
+
+      if (videoErro) {
+        setErro(videoErro);
+        setAba("videos");
+        return;
+      }
+    }
+
+    setErro("");
+    setAba(destino);
+  }
+
+  async function guardar(event) {
+    event.preventDefault();
+
+    const erroCurso =
+      validarCurso();
+
+    if (erroCurso) {
+      setErro(erroCurso);
+      setAba("dados");
+      return;
+    }
+
+    const erroVideos =
+      validarVideos();
+
+    if (erroVideos) {
+      setErro(
+        erroVideos
+      );
+      setAba("videos");
+      return;
+    }
+
+    const erroPerguntas =
+      validarPerguntas();
+
+    if (erroPerguntas) {
+      setErro(
+        erroPerguntas
+      );
+      setAba("perguntas");
+      return;
+    }
+
+    setSaving(true);
+    setErro("");
+
+    try {
+      const payload = {
+        title:
+          titulo.trim(),
+        description:
+          descricao.trim(),
+        link:
+          link.trim(),
+        published:
+          publicado,
+        videos:
+          videos.map(
+            (video) => ({
+              title:
+                video.title.trim(),
+              description:
+                video.description.trim(),
+              link:
+                video.link.trim(),
+            })
+          ),
+        questions:
+          perguntas.map(
+            (pergunta) => ({
+              question:
+                pergunta.question.trim(),
+              options:
+                pergunta.options.map(
+                  (opcao) =>
+                    textoDaOpcao(opcao).trim()
+                ),
+              correct_answer:
+                Number(
+                  pergunta.correct_answer
+                ),
+            })
+          ),
+      };
+
+      const resposta =
+        await fetch(
+          editar
+            ? `${API_BASE}/courses/${curso.id}`
+            : `${API_BASE}/courses`,
+          {
+            method: editar
+              ? "PUT"
+              : "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify(
+                payload
+              ),
+          }
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(
+            () => null
+          );
+
+      if (!resposta.ok) {
+        throw new Error(
+          erroAPI(
+            dados,
+            "Não foi possível guardar o curso."
+          )
+        );
+      }
+
+      onSaved(
+        dados,
+        editar
+          ? "Curso actualizado com sucesso."
+          : "Curso criado com sucesso."
+      );
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Não foi possível guardar o curso."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={
+        editar
+          ? "Editar curso"
+          : "Criar novo curso"
+      }
+      subtitle="Organize os dados, vídeos e a avaliação do curso."
+      onClose={onClose}
+    >
+      <form
+        onSubmit={guardar}
+        className="p-5 sm:p-6"
+      >
+        <div className="grid gap-2 rounded-xl bg-slate-100 p-1 md:grid-cols-3">
+          {[
+            [
+              "dados",
+              "Dados do curso",
+            ],
+            [
+              "videos",
+              `Vídeos (${videos.length})`,
+            ],
+            [
+              "perguntas",
+              "10 perguntas",
+            ],
+          ].map(
+            ([valor, texto]) => (
+              <button
+                key={valor}
+                type="button"
+                onClick={() =>
+                  validarETestaAba(
+                    valor
+                  )
+                }
+                className={`rounded-lg px-3 py-2.5 text-xs font-black transition ${
+                  aba === valor
+                    ? "bg-white text-blue-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {texto}
+              </button>
+            )
+          )}
+        </div>
+
+        {erro ? (
+          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {erro}
+          </div>
+        ) : null}
+
+        {aba === "dados" ? (
+          <div className="mt-5 space-y-4">
+            <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+                  <BookOpen
+                    size={21}
+                  />
+                </div>
+
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider text-blue-600">
+                    Configuração
+                  </p>
+
+                  <p className="text-sm font-black text-slate-900">
+                    Informações principais
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Campo
+              label="Título"
+              value={titulo}
+              onChange={
+                setTitulo
+              }
+              placeholder="Ex.: Fundamentos de Segurança Digital"
+            />
+
+            <Campo
+              label="Descrição"
+              value={
+                descricao
+              }
+              onChange={
+                setDescricao
+              }
+              placeholder="Descreva o objectivo e conteúdo do curso."
+              textarea
+            />
+
+            <Campo
+              label="Link do curso"
+              value={link}
+              onChange={
+                setLink
+              }
+              placeholder="https://..."
+            />
+
+            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div>
+                <p className="text-sm font-black text-slate-900">
+                  Publicar curso
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Disponível na área do estudante.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPublicado(
+                    (valor) =>
+                      !valor
+                  )
+                }
+                className={`relative h-7 w-12 rounded-full transition ${
+                  publicado
+                    ? "bg-blue-600"
+                    : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${
+                    publicado
+                      ? "left-6"
+                      : "left-1"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {aba === "videos" ? (
+          <div className="mt-5 space-y-4">
+            <div className="flex flex-col gap-4 rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700 p-6 text-white sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-blue-200">
+                  <Film size={18} />
+
+                  <span className="text-xs font-black uppercase tracking-wider">
+                    Conteúdo multimédia
+                  </span>
+                </div>
+
+                <h3 className="mt-2 text-xl font-black">
+                  Vídeos do curso
+                </h3>
+
+                <p className="mt-1 max-w-xl text-sm text-blue-100">
+                  Adicione quantos vídeos forem necessários. Cada vídeo possui título, descrição e link.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  adicionarVideo
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-blue-700 shadow-lg transition hover:-translate-y-0.5"
+              >
+                <Plus
+                  size={17}
+                />
+                Adicionar vídeo
+              </button>
+            </div>
+
+            {videos.length ===
+            0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+                <Film
+                  size={38}
+                  className="mx-auto text-slate-300"
+                />
+
+                <h3 className="mt-4 text-lg font-black text-slate-900">
+                  Ainda não existem vídeos
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Comece por adicionar o primeiro vídeo do curso.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={
+                    adicionarVideo
+                  }
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white"
+                >
+                  <Plus
+                    size={17}
+                  />
+                  Adicionar primeiro vídeo
+                </button>
+              </div>
+            ) : null}
+
+            {videos.map(
+              (
+                video,
+                index
+              ) => (
+                <div
+                  key={
+                    video.id ||
+                    `video-${index}`
+                  }
+                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                        <Film
+                          size={18}
+                        />
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.13em] text-blue-600">
+                          Vídeo{" "}
+                          {index + 1}
+                        </p>
+
+                        <p className="text-sm font-black text-slate-900">
+                          Conteúdo do curso
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removerVideo(
+                          index
+                        )
+                      }
+                      className="rounded-xl p-2 text-red-400 transition hover:bg-red-50 hover:text-red-600"
+                      title="Remover vídeo"
+                    >
+                      <Trash2
+                        size={17}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="mt-5 grid gap-5">
+                    <Campo
+                      label="Título do vídeo"
+                      value={
+                        video.title
+                      }
+                      onChange={(
+                        valor
+                      ) =>
+                        atualizarVideo(
+                          index,
+                          "title",
+                          valor
+                        )
+                      }
+                      placeholder="Ex.: Introdução à Segurança Digital"
+                    />
+
+                    <Campo
+                      label="Descrição do vídeo"
+                      value={
+                        video.description
+                      }
+                      onChange={(
+                        valor
+                      ) =>
+                        atualizarVideo(
+                          index,
+                          "description",
+                          valor
+                        )
+                      }
+                      placeholder="Explique brevemente o conteúdo do vídeo."
+                      textarea
+                    />
+
+                    <Campo
+                      label="Link do vídeo"
+                      value={
+                        video.link
+                      }
+                      onChange={(
+                        valor
+                      ) =>
+                        atualizarVideo(
+                          index,
+                          "link",
+                          valor
+                        )
+                      }
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        ) : null}
+
+        {aba === "perguntas" ? (
+          <div className="mt-5 space-y-4">
+            <div className="rounded-3xl bg-gradient-to-br from-indigo-950 via-blue-900 to-blue-600 p-6 text-white">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
+                  <FileQuestion
+                    size={21}
+                  />
+                </div>
+
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider text-blue-200">
+                    Avaliação
+                  </p>
+
+                  <h3 className="text-xl font-black">
+                    Exactamente 10 perguntas
+                  </h3>
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-blue-100">
+                Cada questão possui quatro opções e uma resposta correcta.
+              </p>
+            </div>
+
+            {perguntas.map(
+              (
+                pergunta,
+                index
+              ) => (
+                <div
+                  key={
+                    pergunta.id ||
+                    `pergunta-${index}`
+                  }
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-600">
+                        Pergunta{" "}
+                        {index + 1}
+                      </p>
+
+                      <p className="mt-1 text-sm font-black text-slate-900">
+                        Questão
+                      </p>
+                    </div>
+
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-sm font-black text-blue-700">
+                      {index + 1}
+                    </span>
+                  </div>
+
+                  <div className="mt-4">
+                    <Campo
+                      label="Texto da pergunta"
+                      value={
+                        pergunta.question
+                      }
+                      onChange={(
+                        valor
+                      ) =>
+                        atualizarPergunta(
+                          index,
+                          "question",
+                          valor
+                        )
+                      }
+                      placeholder="Escreva a pergunta."
+                      textarea
+                    />
+                  </div>
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    {pergunta.options.map(
+                      (
+                        opcao,
+                        opcaoIndex
+                      ) => (
+                        <div
+                          key={
+                            opcaoIndex
+                          }
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                              Opção{" "}
+                              {opcaoIndex +
+                                1}
+                            </span>
+
+                            <label className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                              <input
+                                type="radio"
+                                name={`correct-${index}`}
+                                checked={
+                                  Number(
+                                    pergunta.correct_answer
+                                  ) ===
+                                  opcaoIndex
+                                }
+                                onChange={() =>
+                                  atualizarPergunta(
+                                    index,
+                                    "correct_answer",
+                                    opcaoIndex
+                                  )
+                                }
+                                className="accent-blue-600"
+                              />
+
+                              correcta
+                            </label>
+                          </div>
+
+                          <input
+                            value={
+                              opcao
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              atualizarOpcao(
+                                index,
+                                opcaoIndex,
+                                event
+                                  .target
+                                  .value
+                              )
+                            }
+                            placeholder={`Opção ${
+                              opcaoIndex +
+                              1
+                            }`}
+                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold !text-slate-900 placeholder:text-slate-400 caret-blue-600 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                            style={{
+                              color:
+                                "#0f172a",
+                              WebkitTextFillColor:
+                                "#0f172a",
+                            }}
+                          />
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        ) : null}
+
+        <div className="mt-7 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
+          >
+            Cancelar
+          </button>
+
+          <div className="flex gap-2">
+            {aba !== "dados" ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setAba(
+                    aba ===
+                      "perguntas"
+                      ? "videos"
+                      : "dados"
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"
+              >
+                <ChevronLeft
+                  size={16}
+                />
+                Anterior
+              </button>
+            ) : null}
+
+            {aba !==
+            "perguntas" ? (
+              <button
+                type="button"
+                onClick={() =>
+                  validarETestaAba(
+                    aba ===
+                      "dados"
+                      ? "videos"
+                      : "perguntas"
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/15 hover:bg-blue-700"
+              >
+                Continuar
+                <ChevronRight
+                  size={16}
+                />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={
+                  saving
+                }
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/15 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? (
+                  <LoaderCircle
+                    size={17}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Check
+                    size={17}
+                  />
+                )}
+
+                {saving
+                  ? "A guardar..."
+                  : editar
+                    ? "Guardar alterações"
+                    : "Criar curso"}
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function PerguntasModal({
+  curso,
+  onClose,
+  onUpdated,
+}) {
+  const [perguntas, setPerguntas] =
+    useState(
+      normalizarPerguntas(
+        curso.questions
+      )
+    );
+
+  const [indice, setIndice] =
+    useState(0);
+
+  const [erro, setErro] =
+    useState("");
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const pergunta =
+    perguntas[indice];
+
+  function atualizarCampo(
+    campo,
+    valor
+  ) {
+    setPerguntas((actual) =>
+      actual.map(
+        (item, index) =>
+          index === indice
+            ? {
+                ...item,
+                [campo]:
+                  valor,
+              }
+            : item
+      )
+    );
+  }
+
+  function atualizarOpcao(
+    opcaoIndex,
+    valor
+  ) {
+    setPerguntas((actual) =>
+      actual.map(
+        (item, index) =>
+          index === indice
+            ? {
+                ...item,
+                options:
+                  item.options.map(
+                    (
+                      opcao,
+                      oi
+                    ) =>
+                      oi ===
+                      opcaoIndex
+                        ? valor
+                        : opcao
+                  ),
+              }
+            : item
+      )
+    );
+  }
+
+  async function guardar() {
+    setErro("");
+
+    if (!pergunta?.id) {
+      setErro(
+        "A pergunta não possui um ID válido."
+      );
+      return;
+    }
+
+    if (!pergunta.question.trim()) {
+      setErro(
+        "A pergunta é obrigatória."
+      );
+      return;
+    }
+
+    if (
+      pergunta.options.some(
+        (opcao) =>
+          !String(
+            opcao
+          ).trim()
+      )
+    ) {
+      setErro(
+        "Todas as opções são obrigatórias."
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const resposta =
+        await fetch(
+          `${API_BASE}/courses/${curso.id}/questions/${pergunta.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              question:
+                pergunta.question.trim(),
+              options:
+                pergunta.options.map(
+                  (opcao) =>
+                    opcao.trim()
+                ),
+              correct_answer:
+                Number(
+                  pergunta.correct_answer
+                ),
+            }),
+          }
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(
+            () => null
+          );
+
+      if (!resposta.ok) {
+        throw new Error(
+          erroAPI(
+            dados,
+            "Não foi possível guardar a pergunta."
+          )
+        );
+      }
+
+      setPerguntas(
+        normalizarPerguntas(
+          dados.questions
+        )
+      );
+
+      onUpdated(
+        dados,
+        `Pergunta ${indice + 1} actualizada com sucesso.`
+      );
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Não foi possível guardar a pergunta."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={`Perguntas · ${curso.title}`}
+      subtitle="10 perguntas, 4 opções por pergunta."
+      onClose={onClose}
+    >
+      <div className="grid gap-6 p-6 lg:grid-cols-[215px_1fr]">
+        <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <p className="px-2 pb-3 text-[10px] font-black uppercase tracking-wider text-slate-400">
+            Navegação
+          </p>
+
+          <div className="grid grid-cols-5 gap-2 lg:grid-cols-1">
+            {perguntas.map(
+              (
+                item,
+                index
+              ) => (
+                <button
+                  key={
+                    item.id ||
+                    index
+                  }
+                  type="button"
+                  onClick={() =>
+                    setIndice(
+                      index
+                    )
+                  }
+                  className={`rounded-xl px-3 py-2 text-left text-xs font-black ${
+                    indice ===
+                    index
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-slate-600 hover:bg-blue-50"
+                  }`}
+                >
+                  Pergunta{" "}
+                  {index + 1}
+                </button>
+              )
+            )}
+          </div>
+        </aside>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          {erro ? (
+            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {erro}
+            </div>
+          ) : null}
+
+          <Campo
+            label="Pergunta"
+            value={
+              pergunta?.question ||
+              ""
+            }
+            onChange={(
+              valor
+            ) =>
+              atualizarCampo(
+                "question",
+                valor
+              )
+            }
+            placeholder="Escreva a pergunta."
+            textarea
+          />
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {(
+              pergunta?.options ||
+              []
+            ).map(
+              (
+                opcao,
+                opcaoIndex
+              ) => (
+                <div
+                  key={
+                    opcaoIndex
+                  }
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                      Opção{" "}
+                      {opcaoIndex +
+                        1}
+                    </span>
+
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                      <input
+                        type="radio"
+                        name={`edit-${curso.id}`}
+                        checked={
+                          Number(
+                            pergunta.correct_answer
+                          ) ===
+                          opcaoIndex
+                        }
+                        onChange={() =>
+                          atualizarCampo(
+                            "correct_answer",
+                            opcaoIndex
+                          )
+                        }
+                        className="accent-blue-600"
+                      />
+
+                      correcta
+                    </label>
+                  </div>
+
+                  <input
+                    value={opcao}
+                    onChange={(
+                      event
+                    ) =>
+                      atualizarOpcao(
+                        opcaoIndex,
+                        event
+                          .target
+                          .value
+                      )
+                    }
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold !text-slate-900 placeholder:text-slate-400 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                    style={{
+                      color:
+                        "#0f172a",
+                      WebkitTextFillColor:
+                        "#0f172a",
+                    }}
+                  />
+                </div>
+              )
+            )}
+          </div>
+
+          <div className="mt-6 flex flex-wrap justify-between gap-3 border-t border-slate-200 pt-5">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={
+                  indice === 0
+                }
+                onClick={() =>
+                  setIndice(
+                    (valor) =>
+                      Math.max(
+                        0,
+                        valor - 1
+                      )
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 disabled:opacity-40"
+              >
+                <ChevronLeft
+                  size={15}
+                />
+                Anterior
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  indice ===
+                  TOTAL_PERGUNTAS -
+                    1
+                }
+                onClick={() =>
+                  setIndice(
+                    (valor) =>
+                      Math.min(
+                        TOTAL_PERGUNTAS -
+                          1,
+                        valor + 1
+                      )
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 disabled:opacity-40"
+              >
+                Próxima
+                <ChevronRight
+                  size={15}
+                />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                guardar
+              }
+              disabled={
+                saving
+              }
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {saving ? (
+                <LoaderCircle
+                  size={16}
+                  className="animate-spin"
+                />
+              ) : (
+                <Check
+                  size={16}
+                />
+              )}
+
+              {saving
+                ? "A guardar..."
+                : "Guardar pergunta"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function CursoCard({
+  curso,
+  indice,
+  onEdit,
+  onQuestions,
+  onPublish,
+  onDelete,
+  onOpen,
+}) {
+  const publicado =
+    curso.published !==
+    false;
+
+  const videos =
+    Number(
+      curso.videos_count
+    ) ||
+    (Array.isArray(
+      curso.videos
+    )
+      ? curso.videos.length
+      : 0);
+
+  const questions =
+    Number(
+      curso.questions_count
+    ) ||
+    (Array.isArray(
+      curso.questions
+    )
+      ? curso.questions.length
+      : 0);
+
+  return (
+    <article className="group overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl">
+      <div
+        className={`relative h-[180px] overflow-hidden bg-gradient-to-br ${visualCurso(
+          indice
+        )}`}
+      >
+        <div className="absolute inset-0 opacity-50 [background-image:radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.22),transparent_32%),radial-gradient(circle_at_80%_80%,rgba(255,255,255,0.14),transparent_36%)]" />
+
+        <div className="absolute left-5 top-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-2xl shadow-xl backdrop-blur">
+          <ShieldCheck
+            size={25}
+            className="text-white"
+          />
+        </div>
+
+        <div className="absolute right-4 top-4">
+          <StatusBadge
+            publicado={
+              publicado
+            }
+          />
+        </div>
+
+        <div className="absolute bottom-5 left-5 right-5">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/70">
+                SICSI III
+              </p>
+
+              <div className="mt-2 flex items-center gap-2 text-white">
+                <Film
+                  size={15}
+                />
+
+                <span className="text-xs font-bold">
+                  {videos}{" "}
+                  {videos ===
+                  1
+                    ? "vídeo"
+                    : "vídeos"}
+                </span>
+
+                <span className="text-white/40">
+                  •
+                </span>
+
+                <FileQuestion
+                  size={15}
+                />
+
+                <span className="text-xs font-bold">
+                  {questions}{" "}
+                  perguntas
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-5">
+        <div className="min-h-[96px]">
+          <h2 className="line-clamp-2 text-[18px] font-black leading-6 text-slate-950">
+            {curso.title ||
+              "Curso sem título"}
+          </h2>
+
+          <p className="mt-2 line-clamp-3 text-sm leading-5 text-slate-500">
+            {curso.description ||
+              "Sem descrição disponível."}
+          </p>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl bg-blue-50 p-3">
+            <p className="text-[9px] font-black uppercase tracking-wider text-blue-500">
+              Vídeos
+            </p>
+
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-black text-blue-950">
+              <Film
+                size={14}
+              />
+
+              {videos}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-indigo-50 p-3">
+            <p className="text-[9px] font-black uppercase tracking-wider text-indigo-500">
+              Avaliação
+            </p>
+
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-black text-indigo-950">
+              <FileQuestion
+                size={14}
+              />
+
+              {questions}/10
+            </p>
+          </div>
+        </div>
+
+
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Acao
+            icon={Edit3}
+            onClick={() =>
+              onEdit(curso)
+            }
+          >
+            Editar
+          </Acao>
+
+          <Acao
+            icon={
+              FileQuestion
+            }
+            onClick={() =>
+              onQuestions(
+                curso
+              )
+            }
+          >
+            Perguntas
+          </Acao>
+
+          <Acao
+            icon={
+              publicado
+                ? EyeOff
+                : Eye
+            }
+            onClick={() =>
+              onPublish(
+                curso
+              )
+            }
+          >
+            {publicado
+              ? "Ocultar"
+              : "Publicar"}
+          </Acao>
+
+          <Acao
+            icon={Trash2}
+            danger
+            onClick={() =>
+              onDelete(curso)
+            }
+          >
+            Eliminar
+          </Acao>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export default function AdminCoursesPage() {
+  const [cursos, setCursos] =
+    useState([]);
+
+  const [pesquisa, setPesquisa] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [modal, setModal] =
+    useState(null);
+
+  const [toast, setToast] =
+    useState(null);
+
+  function notificar(
+    message,
+    type = "success"
+  ) {
+    setToast({
+      message,
+      type,
+    });
+  }
+
+  async function carregarCursos() {
+    setLoading(true);
+
+    try {
+      const resposta =
+        await fetch(
+          `${API_BASE}/courses`
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(
+            () => null
+          );
+
+      if (!resposta.ok) {
+        throw new Error(
+          erroAPI(
+            dados,
+            "Não foi possível carregar os cursos."
+          )
+        );
+      }
+
+      setCursos(
+        Array.isArray(dados)
+          ? dados
+          : []
+      );
+    } catch (error) {
+      notificar(
+        error?.message ||
+          "Não foi possível carregar os cursos.",
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarCursos();
+  }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timer =
+      setTimeout(
+        () =>
+          setToast(
+            null
+          ),
+        4500
+      );
+
+    return () =>
+      clearTimeout(timer);
+  }, [toast]);
+
+  const filtrados =
+    useMemo(() => {
+      const termo =
+        pesquisa
+          .trim()
+          .toLowerCase();
+
+      if (!termo) {
+        return cursos;
+      }
+
+      return cursos.filter(
+        (curso) =>
+          String(
+            curso.title ||
+              ""
+          )
+            .toLowerCase()
+            .includes(
+              termo
+            ) ||
+          String(
+            curso.description ||
+              ""
+          )
+            .toLowerCase()
+            .includes(
+              termo
+            )
+      );
+    }, [
+      cursos,
+      pesquisa,
+    ]);
+
+  const total =
+    cursos.length;
+
+  const publicados =
+    cursos.filter(
+      (curso) =>
+        curso.published !==
+        false
+    ).length;
+
+  const rascunhos =
+    total - publicados;
+
+  async function guardarCurso(
+    dados,
+    mensagem
+  ) {
+    setCursos((actual) => {
+      const existe =
+        actual.some(
+          (item) =>
+            item.id ===
+            dados.id
+        );
+
+      return existe
+        ? actual.map(
+            (item) =>
+              item.id ===
+              dados.id
+                ? dados
+                : item
+          )
+        : [
+            ...actual,
+            dados,
+          ];
+    });
+
+    setModal(null);
+    notificar(
+      mensagem
+    );
+  }
+
+  async function alterarPublicacao(
+    curso
+  ) {
+    try {
+      const resposta =
+        await fetch(
+          `${API_BASE}/courses/${curso.id}/publish`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              published:
+                curso.published ===
+                false,
+            }),
+          }
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(
+            () => null
+          );
+
+      if (!resposta.ok) {
+        throw new Error(
+          erroAPI(
+            dados,
+            "Não foi possível alterar a publicação."
+          )
+        );
+      }
+
+      setCursos((actual) =>
+        actual.map(
+          (item) =>
+            item.id ===
+            curso.id
+              ? dados
+              : item
+        )
+      );
+
+      notificar(
+        dados.published
+          ? "Curso publicado com sucesso."
+          : "Curso retirado da publicação."
+      );
+    } catch (error) {
+      notificar(
+        error?.message ||
+          "Não foi possível alterar a publicação.",
+        "error"
+      );
+    }
+  }
+
+  async function eliminarCurso(
+    curso
+  ) {
+    const confirmar =
+      window.confirm(
+        `Tem a certeza que deseja eliminar "${curso.title}"?\n\nEsta operação é permanente.`
+      );
+
+    if (!confirmar) {
+      return;
+    }
+
+    try {
+      const resposta =
+        await fetch(
+          `${API_BASE}/courses/${curso.id}?confirm=true`,
+          {
+            method: "DELETE",
+          }
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(
+            () => null
+          );
+
+      if (!resposta.ok) {
+        throw new Error(
+          erroAPI(
+            dados,
+            "Não foi possível eliminar o curso."
+          )
+        );
+      }
+
+      setCursos((actual) =>
+        actual.filter(
+          (item) =>
+            item.id !==
+            curso.id
+        )
+      );
+
+      notificar(
+        "Curso eliminado com sucesso."
+      );
+    } catch (error) {
+      notificar(
+        error?.message ||
+          "Não foi possível eliminar o curso.",
+        "error"
+      );
+    }
+  }
+
+  function abrirCurso(
+    curso
+  ) {
+    const url =
+      String(
+        curso.link || ""
+      ).trim();
+
+    if (!url) {
+      notificar(
+        "Este curso não possui um link.",
+        "error"
+      );
+      return;
+    }
+
+    window.open(
+      url,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  function actualizarDepoisPergunta(
+    dados,
+    mensagem
+  ) {
+    setCursos((actual) =>
+      actual.map(
+        (item) =>
+          item.id ===
+          dados.id
+            ? dados
+            : item
+      )
+    );
+
+    notificar(
+      mensagem
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-6 text-white shadow-2xl shadow-blue-600/20 lg:p-8">
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-cyan-300/10 blur-3xl" />
+
+        <div className="relative grid gap-6 xl:grid-cols-[1.4fr_1fr_auto] xl:items-center">
+          <div>
+            <div className="flex items-center gap-2 text-blue-100">
+              <ShieldCheck
+                size={18}
+              />
+
+              <span className="text-[11px] font-black uppercase tracking-[0.18em]">
+                Cursos
+              </span>
+            </div>
+
+            <h1 className="mt-2 text-3xl font-black tracking-tight lg:text-4xl">
+              Gestão de Cursos
+            </h1>
+
+            <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100 lg:text-base">
+              Crie, organize e administre a formação de cibersegurança do SICSI III.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <BookOpen
+                size={18}
+              />
+
+              <p className="mt-2 text-2xl font-black">
+                {total}
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                Cursos
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <CheckCircle2
+                size={18}
+              />
+
+              <p className="mt-2 text-2xl font-black">
+                {publicados}
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                Publicados
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <EyeOff
+                size={18}
+              />
+
+              <p className="mt-2 text-2xl font-black">
+                {rascunhos}
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                Rascunhos
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setModal({
+                type: "curso",
+                curso: null,
+              })
+            }
+            className="flex min-w-[190px] items-center justify-between gap-4 rounded-2xl bg-white px-5 py-4 text-left text-slate-900 shadow-xl transition hover:-translate-y-1"
+          >
+            <span>
+              <span className="block text-[10px] font-black uppercase tracking-wider text-blue-600">
+                Criar
+              </span>
+
+              <span className="mt-1 block text-sm font-black">
+                Novo curso
+              </span>
+
+              <span className="mt-1 block text-[11px] text-slate-400">
+                Curso + vídeos + avaliação
+              </span>
+            </span>
+
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white">
+              <Plus
+                size={20}
+              />
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3 lg:flex-row">
+        <div className="relative flex-1">
+          <Search
+            size={18}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+
+          <input
+            value={
+              pesquisa
+            }
+            onChange={(
+              event
+            ) =>
+              setPesquisa(
+                event.target
+                  .value
+              )
+            }
+            placeholder="Pesquisar cursos..."
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 pl-11 text-sm font-semibold !text-slate-900 placeholder:text-slate-400 shadow-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-500/10"
+            style={{
+              color:
+                "#0f172a",
+              WebkitTextFillColor:
+                "#0f172a",
+            }}
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={
+            carregarCursos
+          }
+          disabled={
+            loading
+          }
+          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-black text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:opacity-50"
+        >
+          <RefreshCw
+            size={17}
+            className={
+              loading
+                ? "animate-spin"
+                : ""
+            }
+          />
+          Actualizar
+        </button>
+      </section>
+
+      {loading ? (
+        <section className="flex min-h-[360px] items-center justify-center rounded-[30px] border border-slate-200 bg-white">
+          <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
+            <LoaderCircle
+              size={22}
+              className="animate-spin text-blue-600"
+            />
+            A carregar cursos...
+          </div>
+        </section>
+      ) : filtrados.length ===
+        0 ? (
+        <section className="flex min-h-[360px] flex-col items-center justify-center rounded-[30px] border border-dashed border-slate-300 bg-white text-center">
+          <BookOpen
+            size={44}
+            className="text-slate-300"
+          />
+
+          <h2 className="mt-4 text-lg font-black text-slate-900">
+            Nenhum curso encontrado
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Tente outra pesquisa.
+          </p>
+        </section>
+      ) : (
+        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          {filtrados
+            .map(
+              (
+                curso,
+                index
+              ) => (
+                <CursoCard
+                  key={
+                    curso.id
+                  }
+                  curso={
+                    curso
+                  }
+                  indice={
+                    index
+                  }
+                  onEdit={(
+                    item
+                  ) =>
+                    setModal({
+                      type: "curso",
+                      curso: item,
+                    })
+                  }
+                  onQuestions={(
+                    item
+                  ) =>
+                    setModal({
+                      type: "perguntas",
+                      curso: item,
+                    })
+                  }
+                  onPublish={
+                    alterarPublicacao
+                  }
+                  onDelete={
+                    eliminarCurso
+                  }
+                  onOpen={
+                    abrirCurso
+                  }
+                />
+              )
+            )}
+        </section>
+      )}
+
+      {modal?.type ===
+      "curso" ? (
+        <CursoModal
+          key={
+            modal.curso?.id ||
+            "novo"
+          }
+          curso={
+            modal.curso
+          }
+          onClose={() =>
+            setModal(null)
+          }
+          onSaved={
+            guardarCurso
+          }
+        />
+      ) : null}
+
+      {modal?.type ===
+      "perguntas" ? (
+        <PerguntasModal
+          key={
+            modal.curso.id
+          }
+          curso={
+            cursos.find(
+              (item) =>
+                item.id ===
+                modal.curso.id
+            ) ||
+            modal.curso
+          }
+          onClose={() =>
+            setModal(null)
+          }
+          onUpdated={
+            actualizarDepoisPergunta
+          }
+        />
+      ) : null}
+
+      {toast ? (
+        <div
+          className={`fixed bottom-5 right-5 z-[120] max-w-md rounded-2xl px-5 py-3 text-sm font-bold text-white shadow-2xl ${
+            toast.type ===
+            "error"
+              ? "bg-red-600"
+              : "bg-slate-950"
+          }`}
+        >
+          {toast.message}
+        </div>
+      ) : null}
+    </div>
+  );
+}

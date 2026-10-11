@@ -1,0 +1,1649 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  ChevronLeft,
+  Download,
+  FileText,
+  Headphones,
+  Laptop,
+  Lock,
+  MessageCircle,
+  MoreHorizontal,
+  Phone,
+  RefreshCw,
+  ShieldCheck,
+  UserCheck,
+  Video,
+  XCircle,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "../../../../context/AuthContext";
+
+import {
+  getCurrentSimulation,
+  registerAction,
+  startSimulation,
+} from "../engine/simulationEngine";
+
+import { completeSimulationSession } from "../engine/simulationSession";
+
+const SIMULATION = {
+  area: "phishing",
+  id: "phishing-02",
+  number: 2,
+  title: "Falso suporte",
+};
+
+const STATES = {
+  INBOX: "support_inbox",
+  TICKET: "support_ticket",
+  CHAT: "support_chat",
+  IDENTITY: "identity_verification",
+  DOWNLOAD: "support_download",
+  INSTALL: "support_install",
+  REMOTE_ACCESS: "remote_access",
+  CREDENTIALS: "credential_request",
+  MFA: "mfa_request",
+  SAFE_VERIFICATION: "safe_verification",
+  SAFE_OUTCOME: "safe_outcome",
+  REMOTE_REFUSED: "remote_refused",
+  CREDENTIAL_OUTCOME: "credential_outcome",
+  RECOVERY: "recovery",
+  EXIT_FEEDBACK: "exit_feedback",
+};
+
+function createInitialSession() {
+  const current = getCurrentSimulation();
+
+  if (
+    current &&
+    current.simulation_id === SIMULATION.id &&
+    !current.completed
+  ) {
+    return current;
+  }
+
+  const session = startSimulation({
+    area: SIMULATION.area,
+    simulationId: SIMULATION.id,
+    simulationNumber: SIMULATION.number,
+    initialState: STATES.INBOX,
+  });
+
+  registerAction({
+    action: "simulation_started",
+    nextState: STATES.INBOX,
+    interactionType: "system",
+    metadata: {
+      simulation_id: SIMULATION.id,
+      simulation_number: SIMULATION.number,
+    },
+  });
+
+  return getCurrentSimulation() || session;
+}
+
+export default function Phishing02Page() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [session, setSession] = useState(() => createInitialSession());
+  const [state, setState] = useState(
+    () => createInitialSession()?.current_state || STATES.INBOX
+  );
+
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [message, setMessage] = useState("");
+  const [ticketStatus, setTicketStatus] = useState("Aberto");
+  const [downloaded, setDownloaded] = useState(false);
+  const [installed, setInstalled] = useState(false);
+  const [remoteAccepted, setRemoteAccepted] = useState(false);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaRequested, setMfaRequested] = useState(false);
+
+  const accountEmail =
+    user?.email ||
+    user?.username ||
+    user?.login ||
+    "";
+
+  useEffect(() => {
+    const startedAt = Date.parse(session?.started_at || "");
+
+    if (!Number.isFinite(startedAt)) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(
+        Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+      );
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [session]);
+
+  useEffect(() => {
+    if (accountEmail && !email) {
+      setEmail(accountEmail);
+    }
+  }, [accountEmail, email]);
+
+  const formattedTime = useMemo(() => {
+    const minutes = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
+    const seconds = String(elapsedSeconds % 60).padStart(2, "0");
+
+    return `${minutes}:${seconds}`;
+  }, [elapsedSeconds]);
+
+  function goTo(
+    nextState,
+    action,
+    metadata = {},
+    interactionType = "button"
+  ) {
+    const result = registerAction({
+      action,
+      nextState,
+      interactionType,
+      metadata,
+    });
+
+    if (result.session) {
+      setSession(result.session);
+      setState(result.session.current_state);
+      return;
+    }
+
+    setState(nextState);
+  }
+
+  function handleBack() {
+    registerAction({
+      action: "navigate_back",
+      nextState: null,
+      interactionType: "navigation",
+      metadata: {
+        navigation_method: "browser_history",
+      },
+    });
+
+    navigate(-1);
+  }
+
+  function handleOpenTicket() {
+    setTicketStatus("Em atendimento");
+
+    goTo(
+      STATES.TICKET,
+      "open_support_ticket",
+      {
+        ticket_id: "SUP-2026-0914-4821",
+        source: "academic_portal",
+      }
+    );
+  }
+
+  function handleStartChat() {
+    goTo(
+      STATES.CHAT,
+      "start_support_chat",
+      {
+        channel: "institutional_support",
+      }
+    );
+  }
+
+  function handleSendMessage() {
+    const trimmed = message.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    registerAction({
+      action: "send_support_message",
+      nextState: STATES.CHAT,
+      interactionType: "message",
+      metadata: {
+        message_length: trimmed.length,
+        message_category: "support_request",
+      },
+    });
+
+    setMessage("");
+  }
+
+  function handleContinueIdentity() {
+    goTo(
+      STATES.IDENTITY,
+      "open_identity_verification",
+      {
+        requested_by: "support_agent",
+      }
+    );
+  }
+
+  function handleVerifyIdentity() {
+    goTo(
+      STATES.DOWNLOAD,
+      "continue_identity_verification",
+      {
+        verification_method: "institutional_account",
+        account_present: Boolean(accountEmail),
+      }
+    );
+  }
+
+  function handleDownload() {
+    setDownloaded(true);
+
+    goTo(
+      STATES.INSTALL,
+      "download_support_tool",
+      {
+        file_name: "SICSI_Support_Assist.exe",
+        file_type: "application",
+        download_completed: true,
+      }
+    );
+  }
+
+  function handleInstall() {
+    setInstalled(true);
+
+    goTo(
+      STATES.REMOTE_ACCESS,
+      "run_support_tool",
+      {
+        application: "SICSI Support Assist",
+        installation_completed: true,
+      }
+    );
+  }
+
+  function handleRemoteAccess(accepted) {
+    setRemoteAccepted(accepted);
+
+    if (accepted) {
+      goTo(
+        STATES.CREDENTIAL_OUTCOME,
+        "accept_remote_support",
+        {
+          remote_access: true,
+          permission_scope: "device_support",
+          decision: "unsafe",
+        }
+      );
+
+      return;
+    }
+
+    goTo(
+      STATES.REMOTE_REFUSED,
+      "refuse_remote_support",
+      {
+        remote_access: false,
+        decision: "safe",
+      }
+    );
+  }
+
+  function handleContinueAfterRemoteRefusal() {
+    goTo(
+      STATES.SAFE_OUTCOME,
+      "complete_after_remote_refusal",
+      {
+        alternative_support: true,
+        decision: "safe",
+      }
+    );
+  }
+
+  function handleCredentialSubmit(event) {
+    event.preventDefault();
+
+    if (!email.trim()) {
+      return;
+    }
+
+    goTo(
+      STATES.MFA,
+      "submit_support_credentials",
+      {
+        email_entered: true,
+        password_entered: Boolean(password),
+        password_content: "[REDACTED]",
+      },
+      "form_submit"
+    );
+
+    setPassword("");
+    setMfaRequested(false);
+  }
+
+  function handleRequestMfa() {
+    setMfaRequested(true);
+
+    registerAction({
+      action: "request_mfa_code",
+      nextState: STATES.MFA,
+      interactionType: "button",
+      metadata: {
+        mfa_requested: true,
+      },
+    });
+  }
+
+  function handleSubmitMfa(event) {
+    event.preventDefault();
+
+    if (!mfaCode.trim()) {
+      return;
+    }
+
+    goTo(
+      STATES.CREDENTIAL_OUTCOME,
+      "submit_mfa_code",
+      {
+        mfa_code_entered: true,
+        mfa_code_content: "[REDACTED]",
+      },
+      "form_submit"
+    );
+
+    setMfaCode("");
+  }
+
+  function handleSafeVerification() {
+    goTo(
+      STATES.SAFE_OUTCOME,
+      "verify_support_through_official_channel",
+      {
+        verification_channel: "institutional_portal",
+      }
+    );
+  }
+
+  function handleCallSupport() {
+    goTo(
+      STATES.SAFE_OUTCOME,
+      "contact_official_support",
+      {
+        channel: "official_phone",
+      }
+    );
+  }
+
+  function handleRecovery() {
+    goTo(
+      STATES.RECOVERY,
+      "open_account_recovery",
+      {
+        recovery_started: true,
+      }
+    );
+  }
+
+  function handleReturnFromRecovery() {
+    goTo(
+      STATES.SAFE_VERIFICATION,
+      "return_from_account_recovery",
+      {
+        recovery_completed: false,
+      }
+    );
+  }
+
+  function handleExitFromTicket() {
+    goTo(
+      STATES.EXIT_FEEDBACK,
+      "exit_support_ticket",
+      {
+        reason: "user_left_support_request",
+        ticket_status: ticketStatus,
+      },
+      "navigation"
+    );
+  }
+
+  function handleExitFeedbackNext() {
+    registerAction({
+      action: "continue_to_simulation_03",
+      nextState: "phishing-03",
+      interactionType: "navigation",
+      metadata: {
+        destination: "/student/simulacoes/phishing/03",
+        source_state: STATES.EXIT_FEEDBACK,
+      },
+    });
+
+    navigate("/student/simulacoes/phishing/03");
+  }
+  function handleNextSimulation03() {
+    registerAction({
+      action: "continue_to_simulation_03",
+      nextState: "phishing-03",
+      interactionType: "navigation",
+      metadata: {
+        destination: "/student/simulacoes/phishing/03",
+        source_state: state,
+      },
+    });
+
+    navigate("/student/simulacoes/phishing/03");
+  }
+function handleAcknowledgeRisk() {
+    registerAction({
+      action: "acknowledge_risk",
+      nextState: STATES.EXIT_FEEDBACK,
+      interactionType: "button",
+      metadata: {
+        source_state: STATES.CREDENTIAL_OUTCOME,
+      },
+    });
+
+    setState(STATES.EXIT_FEEDBACK);
+  }
+
+  function handleFinish() {
+    registerAction({
+      action: "complete_simulation",
+      nextState: null,
+      interactionType: "system",
+      metadata: {
+        simulation_completed: true,
+        remote_access_accepted: remoteAccepted,
+        support_tool_downloaded: downloaded,
+        support_tool_installed: installed,
+      },
+    });
+
+    completeSimulationSession();
+
+    navigate("/student/simulacoes");
+  }
+
+  function renderHeader() {
+    return (
+      <header className="border-b border-blue-100 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+              <ShieldCheck size={19} />
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-xs font-bold tracking-tight text-blue-700">
+                SICSI
+              </p>
+              <p className="truncate text-sm font-medium text-slate-500">
+                
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold tabular-nums text-blue-700">
+            {formattedTime}
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  function renderTopBack() {
+    return (
+      <div className="mb-6">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 transition hover:text-blue-700"
+        >
+          <ChevronLeft size={17} />
+          Voltar
+        </button>
+      </div>
+    );
+  }
+
+  function renderInbox() {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-5 sm:px-7">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Central de suporte
+                </p>
+
+                <h1 className="mt-1 text-xl font-bold text-slate-950">
+                  Pedidos recentes
+                </h1>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  registerAction({
+                    action: "refresh_support_inbox",
+                    nextState: STATES.INBOX,
+                    interactionType: "button",
+                  })
+                }
+                className="rounded-xl border border-slate-200 p-2.5 text-slate-500 transition hover:bg-blue-50 hover:text-blue-700"
+                aria-label="Actualizar pedidos"
+              >
+                <RefreshCw size={17} />
+              </button>
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                  <FileText size={21} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  
+
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    O seu pedido de acesso ao portal foi analisado pela equipa
+                    de suporte. Nenhuma acção adicional é necessária neste momento.
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                    <span>SUP-2026-0914-4837</span>
+                    <span>•</span>
+                    <span>há 18 minutos</span>
+                    <span>•</span>
+                    <span>Serviços Académicos</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                  <FileText size={21} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  
+
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Está prevista uma manutenção dos serviços académicos.
+                    Durante o período indicado poderão ocorrer interrupções temporárias.
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                    <span>SUP-2026-0914-4862</span>
+                    <span>•</span>
+                    <span>há 32 minutos</span>
+                    <span>•</span>
+                    <span>Serviços Académicos</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6">
+            <button
+              type="button"
+              onClick={handleOpenTicket}
+              className="group w-full rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                  <FileText size={21} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-bold text-slate-900">
+                      Verificação urgente da conta académica
+                    </p>
+
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+                      Urgente
+                    </span>
+                  </div>
+
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    Foi aberto um pedido relacionado com uma actividade
+                    irregular detectada na sua conta académica.
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                    <span>SUP-2026-0914-4821</span>
+                    <span>•</span>
+                    <span>há poucos minutos</span>
+                    <span>•</span>
+                    <span>Serviços Académicos</span>
+                  </div>
+                </div>
+
+                <ArrowRight
+                  size={18}
+                  className="mt-1 shrink-0 text-slate-300 transition group-hover:translate-x-1 group-hover:text-blue-600"
+                />
+              </div>
+            </button>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                    <FileText size={20} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-bold text-slate-800">
+                        Actualização dos dados do perfil
+                      </p>
+
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                        Normal
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Foi registado um pedido de actualização dos dados
+                      associados ao seu perfil académico.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                      <span>SUP-2026-0908-3176</span>
+                      <span>•</span>
+                      <span>ontem</span>
+                      <span>•</span>
+                      <span>Registo Académico</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                    <FileText size={20} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-bold text-slate-800">
+                        Manutenção dos serviços académicos
+                      </p>
+
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">
+                        Informativo
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Foi emitido um aviso informativo sobre uma intervenção
+                      programada nos serviços académicos.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                      <span>SUP-2026-0906-2048</span>
+                      <span>•</span>
+                      <span>há 2 dias</span>
+                      <span>•</span>
+                      <span>Serviços Académicos</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  function renderTicket() {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 px-5 py-5 sm:px-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Pedido de suporte
+                </p>
+
+                <h1 className="mt-1 text-xl font-bold text-slate-950">
+                  Verificação urgente da conta académica
+                </h1>
+              </div>
+
+              <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                {ticketStatus}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-8">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <InfoCard label="Pedido" value="SUP-2026-0914-4821" />
+              <InfoCard label="Categoria" value="Conta académica" />
+              <InfoCard label="Prioridade" value="Alta" />
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                Descrição
+              </p>
+
+              <p className="mt-3 text-sm leading-7 text-slate-600">
+                Detectámos uma tentativa de acesso considerada incompatível
+                com os padrões habituais da sua conta. Um elemento da equipa
+                de suporte foi associado a este pedido para auxiliar na
+                validação.
+              </p>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={handleStartChat}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+              >
+                <MessageCircle size={17} />
+                Iniciar atendimento
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExitFromTicket}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3.5 text-sm font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              >
+                <ArrowLeft size={17} />
+                Sair
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  function renderChat() {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-7">
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                <UserCheck size={19} />
+                <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+              </div>
+
+              <div>
+                <p className="text-sm font-bold text-slate-900">
+                  André M.
+                </p>
+
+                <p className="text-xs text-emerald-600">
+                  Disponível agora
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                registerAction({
+                  action: "open_chat_options",
+                  nextState: STATES.CHAT,
+                  interactionType: "button",
+                })
+              }
+              className="rounded-xl p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-700"
+              aria-label="Opções da conversa"
+            >
+              <MoreHorizontal size={19} />
+            </button>
+          </div>
+
+          <div className="min-h-[430px] bg-slate-50 p-4 sm:p-7">
+            <div className="mx-auto max-w-3xl space-y-4">
+              <div className="text-center">
+                <span className="rounded-full bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400 shadow-sm">
+                  Hoje · 16:08
+                </span>
+              </div>
+
+              <ChatBubble
+                name="André M."
+                text="Boa tarde. Sou da equipa de suporte dos Serviços Académicos. Estou a acompanhar o pedido SUP-2026-0914-4821."
+              />
+
+              <ChatBubble
+                name="André M."
+                text="Precisamos de concluir uma verificação rápida porque foi detectada uma tentativa de acesso fora do padrão habitual."
+              />
+
+              <ChatBubble
+                name="André M."
+                text="Posso orientar o processo consigo por aqui. Primeiro preciso de confirmar alguns dados da sessão."
+              />
+
+              <div className="flex justify-end">
+                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-blue-600 px-4 py-3 text-sm leading-6 text-white shadow-sm">
+                  Estou a acompanhar o pedido.
+                </div>
+              </div>
+
+              <ChatBubble
+                name="André M."
+                text="Perfeito. Vamos iniciar a validação."
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 bg-white p-4 sm:p-5">
+            <div className="mx-auto max-w-3xl">
+              <div className="flex gap-2">
+                <input
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder="Escreva uma mensagem..."
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleSendMessage}
+                  className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700"
+                >
+                  Enviar
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleContinueIdentity}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+              >
+                Continuar
+                <ArrowRight size={17} />
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  function renderIdentity() {
+    return (
+      <CenteredPanel
+        icon={<UserCheck size={23} />}
+        eyebrow="Validação de identidade"
+        title="Confirmação de dados"
+        description="O atendimento solicita a confirmação dos dados associados à sessão actual."
+      >
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <InfoRow
+            label="Conta actual"
+            value={accountEmail || "Conta autenticada"}
+          />
+
+          <InfoRow
+            label="Serviço"
+            value="Portal Académico"
+          />
+
+          <InfoRow
+            label="Pedido"
+            value="SUP-2026-0914-4821"
+          />
+
+          <InfoRow
+            label="Motivo"
+            value="Verificação de acesso"
+          />
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+          <p className="text-xs leading-5 text-blue-800">
+            O agente informa que será necessário utilizar uma ferramenta de
+            assistência para continuar o atendimento.
+          </p>
+        </div>
+
+        <ActionButton onClick={handleVerifyIdentity}>
+          Continuar
+          <ArrowRight size={17} />
+        </ActionButton>
+      </CenteredPanel>
+    );
+  }
+
+  function renderDownload() {
+    return (
+      <CenteredPanel
+        icon={<Download size={23} />}
+        eyebrow="Assistência técnica"
+        title="Ferramenta de suporte"
+        description="O atendimento disponibiliza uma aplicação para supostamente concluir a verificação técnica."
+      >
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+              <Laptop size={22} />
+            </div>
+
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-slate-900">
+                SICSI_Support_Assist.exe
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Aplicação de suporte · 18,4 MB
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-start gap-3 rounded-2xl border border-slate-200 p-4">
+          <Lock size={18} className="mt-0.5 shrink-0 text-slate-400" />
+
+          <p className="text-xs leading-5 text-slate-500">
+            O atendimento apresenta esta aplicação como ferramenta temporária
+            de assistência.
+          </p>
+        </div>
+
+        <ActionButton onClick={handleDownload}>
+          <Download size={17} />
+          Transferir ferramenta
+        </ActionButton>
+      </CenteredPanel>
+    );
+  }
+
+  function renderInstall() {
+    return (
+      <CenteredPanel
+        icon={<Laptop size={23} />}
+        eyebrow="Aplicação descarregada"
+        title="Abrir ferramenta de suporte"
+        description="A aplicação foi descarregada e solicita autorização para iniciar."
+      >
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Laptop size={22} />
+            </div>
+
+            <div>
+              <p className="text-sm font-bold text-slate-900">
+                SICSI Support Assist
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Aplicação pronta para execução
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <ActionButton onClick={handleInstall}>
+          Abrir aplicação
+          <ArrowRight size={17} />
+        </ActionButton>
+      </CenteredPanel>
+    );
+  }
+
+  function renderRemoteAccess() {
+    return (
+      <CenteredPanel
+        icon={<Video size={23} />}
+        eyebrow="Assistência remota"
+        title="Autorizar assistência"
+        description="A aplicação informa que o técnico precisa de acesso remoto temporário ao dispositivo."
+      >
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600">
+              <Headphones size={19} />
+            </div>
+
+            <div>
+              <p className="text-sm font-bold text-slate-800">
+                Pedido de assistência
+              </p>
+
+              <p className="text-xs text-slate-500">
+                Técnico: André M.
+              </p>
+            </div>
+          </div>
+
+          <ul className="mt-5 space-y-3 text-xs text-slate-600">
+            <li className="flex gap-2">
+              <CheckCircle2 size={15} className="shrink-0 text-slate-400" />
+              Visualização do ecrã
+            </li>
+
+            <li className="flex gap-2">
+              <CheckCircle2 size={15} className="shrink-0 text-slate-400" />
+              Diagnóstico da aplicação
+            </li>
+
+            <li className="flex gap-2">
+              <CheckCircle2 size={15} className="shrink-0 text-slate-400" />
+              Interacção remota
+            </li>
+          </ul>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => handleRemoteAccess(false)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3.5 text-sm font-bold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          >
+            <XCircle size={17} />
+            Recusar acesso
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleRemoteAccess(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+          >
+            <Video size={17} />
+            Autorizar acesso
+          </button>
+        </div>
+      </CenteredPanel>
+    );
+  }
+
+  function renderRemoteRefused() {
+    return (
+      <CenteredPanel
+        icon={<CheckCircle2 size={23} />}
+        eyebrow="Resultado da simulação"
+        title="Acesso remoto recusado"
+        description="Você tomou uma decisão segura ao não entregar o controlo do dispositivo."
+      >
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <p className="text-sm font-black text-emerald-800">
+            Boa decisão. O acesso remoto não foi autorizado.
+          </p>
+
+          <p className="mt-3 text-sm leading-6 text-emerald-700">
+            Ao recusar, você impediu que um solicitante não verificado
+            obtivesse controlo remoto sobre o dispositivo.
+          </p>
+
+          <p className="mt-3 text-sm leading-6 text-emerald-700">
+            Dessa forma, reduziu o risco de exposição de ficheiros, dados
+            pessoais, informações académicas e da própria sessão.
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">
+            Regra de segurança
+          </p>
+
+          <p className="mt-2 text-sm font-bold leading-6 text-slate-800">
+            Nunca conceda acesso remoto apenas porque alguém afirma ser do
+            suporte. Verifique primeiro através de um canal oficial.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleFinish}
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+        >
+          Concluir simulação
+          <ArrowRight size={17} />
+        </button>
+      </CenteredPanel>
+    );
+  }
+  function renderCredentials() {
+    return (
+      <CenteredPanel
+        icon={<Lock size={23} />}
+        eyebrow="Portal Académico"
+        title="Reautenticação necessária"
+        description="Depois de iniciar a assistência remota, surge uma janela que solicita autenticação para continuar."
+      >
+        <form onSubmit={handleCredentialSubmit}>
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+              Endereço institucional
+            </span>
+
+            <input
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              type="email"
+              autoComplete="username"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+
+          <label className="mt-4 block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+              Palavra-passe
+            </span>
+
+            <input
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              type="password"
+              autoComplete="off"
+              placeholder="Introduza a palavra-passe"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+
+          <button
+            type="submit"
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+          >
+            Continuar
+            <ArrowRight size={17} />
+          </button>
+        </form>
+
+        <button
+          type="button"
+          onClick={handleRecovery}
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-xs font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+        >
+          Preciso de recuperar a conta
+        </button>
+      </CenteredPanel>
+    );
+  }
+
+  function renderMfa() {
+    return (
+      <CenteredPanel
+        icon={<ShieldCheck size={23} />}
+        eyebrow="Verificação adicional"
+        title="Confirme a autenticação"
+        description="O processo apresenta uma segunda etapa de autenticação através de um código."
+      >
+        {!mfaRequested ? (
+          <>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-bold text-slate-800">
+                Código de verificação
+              </p>
+
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                Solicite um código para continuar o processo.
+              </p>
+            </div>
+
+            <ActionButton onClick={handleRequestMfa}>
+              Solicitar código
+              <ArrowRight size={17} />
+            </ActionButton>
+          </>
+        ) : (
+          <form onSubmit={handleSubmitMfa}>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-bold text-slate-800">
+                Código enviado
+              </p>
+
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                Introduza o código apresentado no seu dispositivo.
+              </p>
+            </div>
+
+            <label className="mt-5 block">
+              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+                Código de verificação
+              </span>
+
+              <input
+                value={mfaCode}
+                onChange={(event) => setMfaCode(event.target.value)}
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="000000"
+                className="w-full rounded-xl border border-slate-200 px-4 py-3.5 text-center text-lg font-bold tracking-[0.4em] outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+            >
+              Confirmar código
+              <ArrowRight size={17} />
+            </button>
+          </form>
+        )}
+      </CenteredPanel>
+    );
+  }
+
+  function renderSafeVerification() {
+    return (
+      <CenteredPanel
+        icon={<ShieldCheck size={23} />}
+        eyebrow="Confirmação do atendimento"
+        title="Escolher canal de confirmação"
+        description="O pedido continua pendente e pode ser confirmado através de um canal institucional."
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={handleSafeVerification}
+            className="rounded-2xl border border-slate-200 p-5 text-left transition hover:border-blue-300 hover:bg-blue-50/40"
+          >
+            <ShieldCheck size={20} className="text-blue-600" />
+
+            <p className="mt-3 text-sm font-bold text-slate-900">
+              Confirmar no portal
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Confirmar o pedido através do canal institucional.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCallSupport}
+            className="rounded-2xl border border-slate-200 p-5 text-left transition hover:border-blue-300 hover:bg-blue-50/40"
+          >
+            <Phone size={20} className="text-blue-600" />
+
+            <p className="mt-3 text-sm font-bold text-slate-900">
+              Contactar suporte
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Utilizar o contacto institucional apresentado no portal.
+            </p>
+          </button>
+        </div>
+      </CenteredPanel>
+    );
+  }
+
+  function renderSafeOutcome() {
+    return (
+      <CenteredPanel
+        icon={<CheckCircle2 size={23} />}
+        eyebrow="Atendimento"
+        title="Pedido encaminhado"
+        description="O pedido permanece registado e foi encaminhado para confirmação através de um canal institucional."
+      >
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <InfoRow
+            label="Pedido"
+            value="SUP-2026-0914-4821"
+          />
+
+          <InfoRow
+            label="Estado"
+            value="A aguardar confirmação"
+          />
+
+          <InfoRow
+            label="Canal"
+            value="Serviços Académicos"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleFinish}
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+        >
+          Continuar
+          <ArrowRight size={17} />
+        </button>
+      </CenteredPanel>
+    );
+  }
+
+  function renderCredentialOutcome() {
+    return (
+      <CenteredPanel
+        icon={<XCircle size={23} />}
+        eyebrow="Resultado da simulação"
+        title="Acesso remoto autorizado"
+        description="Esta decisão colocou o dispositivo e os dados da sessão em risco."
+      >
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+          <p className="text-sm font-black text-red-800">
+            Você acabou de conceder acesso remoto a um terceiro não verificado.
+          </p>
+
+          <p className="mt-3 text-sm leading-6 text-red-700">
+            Um atacante com este nível de acesso poderia observar o ecrã,
+            controlar aplicações, aceder a ficheiros e tentar capturar
+            informações da sua conta.
+          </p>
+
+          <p className="mt-3 text-sm leading-6 text-red-700">
+            Se esta fosse uma situação real, poderia perder o controlo da
+            sessão, expor dados académicos e pessoais, sofrer alterações ou
+            utilização indevida da conta e ainda permitir novas tentativas
+            de comprometimento do dispositivo.
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">
+            O que deveria ter feito
+          </p>
+
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            Não autorizar acesso remoto sem confirmar a identidade do
+            solicitante através de um canal institucional oficial.
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-red-100 bg-white p-5">
+          <p className="text-xs font-black uppercase tracking-[0.12em] text-red-500">
+            Lição de segurança
+          </p>
+
+          <p className="mt-2 text-sm font-bold leading-6 text-slate-800">
+            Um pedido de suporte não justifica entregar o controlo do seu
+            dispositivo a alguém que não foi devidamente verificado.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleNextSimulation03}
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+        >
+          Próxima simulação
+          <ArrowRight size={17} />
+        </button>
+      </CenteredPanel>
+    );
+  }
+  function renderRecovery() {
+    return (
+      <CenteredPanel
+        icon={<Lock size={23} />}
+        eyebrow="Recuperação de conta"
+        title="Recuperar acesso"
+        description="O portal apresenta o fluxo normal de recuperação da conta académica."
+      >
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <p className="text-sm font-bold text-slate-800">
+            Pedido de recuperação iniciado
+          </p>
+
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            A recuperação deverá ser concluída através dos mecanismos
+            institucionais disponíveis.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleReturnFromRecovery}
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+        >
+          Voltar ao pedido
+          <ArrowRight size={17} />
+        </button>
+      </CenteredPanel>
+    );
+  }
+
+  function renderExitFeedback() {
+    return (
+      <CenteredPanel
+        icon={<ArrowLeft size={23} />}
+        eyebrow="Pedido de suporte"
+        title="Boa decisão: atendimento interrompido"
+        description="Você saiu antes de conceder acesso remoto ou fornecer informações sensíveis."
+      >
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <p className="text-sm font-black text-emerald-800">
+            Você interrompeu o processo antes de entregar informações ou
+            controlo do dispositivo.
+          </p>
+
+          <p className="mt-3 text-sm leading-6 text-emerald-700">
+            Esta é uma atitude segura quando um pedido inesperado de suporte
+            não foi devidamente verificado.
+          </p>
+
+          <p className="mt-3 text-sm leading-6 text-emerald-700">
+            Ao sair, você reduziu o risco de exposição da sua conta, dos seus
+            dados pessoais e das informações académicas.
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
+          <InfoRow
+            label="Estado"
+            value="Interrompido pelo utilizador"
+          />
+
+          <InfoRow
+            label="Atendimento"
+            value="Não iniciado"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleNextSimulation03}
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+        >
+          Próxima simulação
+          <ArrowRight size={17} />
+        </button>
+      </CenteredPanel>
+    );
+  }
+
+  function renderMainContent() {
+    switch (state) {
+      case STATES.TICKET:
+        return renderTicket();
+
+      case STATES.CHAT:
+        return renderChat();
+
+      case STATES.IDENTITY:
+        return renderIdentity();
+
+      case STATES.DOWNLOAD:
+        return renderDownload();
+
+      case STATES.INSTALL:
+        return renderInstall();
+
+      case STATES.REMOTE_ACCESS:
+        return renderRemoteAccess();
+
+      case STATES.REMOTE_REFUSED:
+        return renderRemoteRefused();
+
+      case STATES.CREDENTIALS:
+        return renderCredentials();
+
+      case STATES.MFA:
+        return renderMfa();
+
+      case STATES.SAFE_VERIFICATION:
+        return renderSafeVerification();
+
+      case STATES.SAFE_OUTCOME:
+        return renderSafeOutcome();
+
+      case STATES.CREDENTIAL_OUTCOME:
+        return renderCredentialOutcome();
+
+      case STATES.RECOVERY:
+        return renderRecovery();
+
+      case STATES.EXIT_FEEDBACK:
+        return renderExitFeedback();
+
+
+      case STATES.INBOX:
+      default:
+        return renderInbox();
+    }
+  }
+
+  const isCompleted = false;
+  const isExitFeedback = state === STATES.EXIT_FEEDBACK;
+
+  return (
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      {renderHeader()}
+
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        {!isCompleted && !isExitFeedback && renderTopBack()}
+
+        {renderMainContent()}
+      </div>
+    </main>
+  );
+}
+
+function CenteredPanel({
+  icon,
+  eyebrow,
+  title,
+  description,
+  children,
+}) {
+  return (
+    <div className="mx-auto max-w-2xl">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+        <div className="border-b border-slate-200 bg-white px-6 py-7 sm:px-9">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              {icon}
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">
+                {eyebrow}
+              </p>
+
+              <h1 className="mt-1 text-xl font-bold text-slate-950">
+                {title}
+              </h1>
+
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {description}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 sm:p-9">
+          {children}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ActionButton({ children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
+    >
+      {children}
+    </button>
+  );
+}
+
+function InfoCard({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+        {label}
+      </p>
+
+      <p className="mt-1 truncate text-sm font-bold text-slate-800">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <div className="flex flex-col gap-1 border-b border-slate-100 py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <span className="text-xs font-semibold text-slate-400">
+        {label}
+      </span>
+
+      <span className="text-sm font-bold text-slate-700 sm:text-right">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ChatBubble({ name, text }) {
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-white px-4 py-3 shadow-sm">
+        <p className="text-[11px] font-bold text-slate-400">
+          {name}
+        </p>
+
+        <p className="mt-1 text-sm leading-6 text-slate-700">
+          {text}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

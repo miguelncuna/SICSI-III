@@ -1,0 +1,1786 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import {
+  BookOpen,
+  Check,
+  ChevronDown,
+  Copy,
+  Edit3,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  FileQuestion,
+  Link2,
+  LoaderCircle,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Trash2,
+  X,
+} from "lucide-react";
+
+const API_BASE = "http://127.0.0.1:8000/api/course-admin";
+
+const TOTAL_PERGUNTAS = 10;
+const TOTAL_OPCOES = 4;
+
+function perguntaVazia() {
+  return {
+    id: "",
+    question: "",
+    options: ["", "", "", ""],
+    correct_answer: 0,
+  };
+}
+
+function perguntasVazias() {
+  return Array.from(
+    { length: TOTAL_PERGUNTAS },
+    () => perguntaVazia()
+  );
+}
+
+function normalizarPerguntas(lista) {
+  const origem = Array.isArray(lista) ? lista : [];
+
+  return Array.from(
+    { length: TOTAL_PERGUNTAS },
+    (_, index) => {
+      const item = origem[index];
+
+      if (!item) {
+        return perguntaVazia();
+      }
+
+      const options = Array.isArray(item.options)
+        ? item.options.map((x) => String(x ?? ""))
+        : [];
+
+      while (options.length < TOTAL_OPCOES) {
+        options.push("");
+      }
+
+      return {
+        id: String(item.id || ""),
+        question: String(item.question || ""),
+        options: options.slice(0, TOTAL_OPCOES),
+        correct_answer: Number.isInteger(
+          Number(item.correct_answer)
+        )
+          ? Number(item.correct_answer)
+          : 0,
+      };
+    }
+  );
+}
+
+function mensagemErro(data, fallback) {
+  if (typeof data?.detail === "string") {
+    return data.detail;
+  }
+
+  if (Array.isArray(data?.detail)) {
+    return data.detail
+      .map((item) => item?.msg)
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return fallback;
+}
+
+function StatusBadge({ publicado }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black ${
+        publicado
+          ? "bg-emerald-50 text-emerald-700"
+          : "bg-amber-50 text-amber-700"
+      }`}
+    >
+      {publicado ? (
+        <Eye size={13} />
+      ) : (
+        <EyeOff size={13} />
+      )}
+
+      {publicado ? "Publicado" : "Rascunho"}
+    </span>
+  );
+}
+
+function Acao({
+  icon: Icon,
+  children,
+  onClick,
+  danger = false,
+  disabled = false,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-black transition ${
+        danger
+          ? "border-red-100 text-red-600 hover:bg-red-50"
+          : "border-slate-200 text-slate-700 hover:bg-slate-50"
+      } disabled:cursor-not-allowed disabled:opacity-40`}
+    >
+      <Icon size={14} />
+      {children}
+    </button>
+  );
+}
+
+function Campo({
+  label,
+  value,
+  onChange,
+  placeholder,
+  textarea = false,
+}) {
+  const Component = textarea ? "textarea" : "input";
+
+  return (
+    <label className="block">
+      <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+        {label}
+      </span>
+
+      <Component
+        value={value}
+        onChange={(event) =>
+          onChange(event.target.value)
+        }
+        placeholder={placeholder}
+        rows={textarea ? 5 : undefined}
+        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+      />
+    </label>
+  );
+}
+
+function Modal({
+  title,
+  subtitle,
+  onClose,
+  children,
+  wide = false,
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div
+        className={`max-h-[94vh] w-full overflow-hidden rounded-[28px] bg-white shadow-2xl ${
+          wide ? "max-w-6xl" : "max-w-3xl"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+          <div>
+            <div className="flex items-center gap-2 text-blue-600">
+              <ShieldCheck size={16} />
+
+              <span className="text-[11px] font-black uppercase tracking-[0.15em]">
+                Administração de cursos
+              </span>
+            </div>
+
+            <h2 className="mt-1 text-xl font-black text-slate-950">
+              {title}
+            </h2>
+
+            {subtitle ? (
+              <p className="mt-1 text-sm text-slate-500">
+                {subtitle}
+              </p>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="max-h-[calc(94vh-90px)] overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CursoModal({
+  curso,
+  onClose,
+  onSaved,
+}) {
+  const editar = Boolean(curso);
+
+  const [titulo, setTitulo] = useState(
+    curso?.title || ""
+  );
+
+  const [descricao, setDescricao] =
+    useState(curso?.description || "");
+
+  const [link, setLink] = useState(
+    curso?.link || ""
+  );
+
+  const [publicado, setPublicado] =
+    useState(curso?.published !== false);
+
+  const [perguntas, setPerguntas] =
+    useState(
+      normalizarPerguntas(
+        curso?.questions
+      )
+    );
+
+  const [etapa, setEtapa] = useState(1);
+  const [erro, setErro] = useState("");
+  const [saving, setSaving] =
+    useState(false);
+
+  function atualizarPergunta(
+    indice,
+    campo,
+    valor
+  ) {
+    setPerguntas((actual) =>
+      actual.map((item, index) =>
+        index === indice
+          ? {
+              ...item,
+              [campo]: valor,
+            }
+          : item
+      )
+    );
+  }
+
+  function atualizarOpcao(
+    perguntaIndex,
+    opcaoIndex,
+    valor
+  ) {
+    setPerguntas((actual) =>
+      actual.map((item, index) => {
+        if (index !== perguntaIndex) {
+          return item;
+        }
+
+        return {
+          ...item,
+          options: item.options.map(
+            (opcao, indexOpcao) =>
+              indexOpcao === opcaoIndex
+                ? valor
+                : opcao
+          ),
+        };
+      })
+    );
+  }
+
+  function validarCurso() {
+    if (!titulo.trim()) {
+      return "O título do curso é obrigatório.";
+    }
+
+    if (!descricao.trim()) {
+      return "A descrição do curso é obrigatória.";
+    }
+
+    if (!link.trim()) {
+      return "O link do curso é obrigatório.";
+    }
+
+    if (
+      !/^https?:\/\//i.test(
+        link.trim()
+      )
+    ) {
+      return "O link deve começar por http:// ou https://.";
+    }
+
+    return "";
+  }
+
+  function validarPerguntas() {
+    if (perguntas.length !== TOTAL_PERGUNTAS) {
+      return "O curso deve possuir exactamente 10 perguntas.";
+    }
+
+    for (
+      let i = 0;
+      i < TOTAL_PERGUNTAS;
+      i++
+    ) {
+      const pergunta = perguntas[i];
+
+      if (!pergunta.question.trim()) {
+        return `A pergunta ${i + 1} está vazia.`;
+      }
+
+      if (
+        !Array.isArray(
+          pergunta.options
+        ) ||
+        pergunta.options.length !==
+          TOTAL_OPCOES
+      ) {
+        return `A pergunta ${i + 1} deve possuir 4 opções.`;
+      }
+
+      for (
+        let j = 0;
+        j < TOTAL_OPCOES;
+        j++
+      ) {
+        if (
+          !String(
+            pergunta.options[j] || ""
+          ).trim()
+        ) {
+          return `A opção ${j + 1} da pergunta ${i + 1} está vazia.`;
+        }
+      }
+
+      const correcta = Number(
+        pergunta.correct_answer
+      );
+
+      if (
+        !Number.isInteger(correcta) ||
+        correcta < 0 ||
+        correcta > 3
+      ) {
+        return `Seleccione a resposta correcta da pergunta ${i + 1}.`;
+      }
+    }
+
+    return "";
+  }
+
+  function continuar() {
+    const erroCurso =
+      validarCurso();
+
+    if (erroCurso) {
+      setErro(erroCurso);
+      setEtapa(1);
+      return;
+    }
+
+    setErro("");
+    setEtapa(2);
+  }
+
+  async function guardar(event) {
+    event.preventDefault();
+
+    const erroCurso =
+      validarCurso();
+
+    if (erroCurso) {
+      setErro(erroCurso);
+      setEtapa(1);
+      return;
+    }
+
+    const erroPerguntas =
+      validarPerguntas();
+
+    if (erroPerguntas) {
+      setErro(erroPerguntas);
+      setEtapa(2);
+      return;
+    }
+
+    setSaving(true);
+    setErro("");
+
+    try {
+      const payload = {
+        title: titulo.trim(),
+        description:
+          descricao.trim(),
+        link: link.trim(),
+        published: publicado,
+        questions:
+          perguntas.map(
+            (pergunta) => ({
+              question:
+                pergunta.question.trim(),
+              options:
+                pergunta.options.map(
+                  (opcao) =>
+                    opcao.trim()
+                ),
+              correct_answer:
+                Number(
+                  pergunta.correct_answer
+                ),
+            })
+          ),
+      };
+
+      const resposta =
+        await fetch(
+          editar
+            ? `${API_BASE}/courses/${curso.id}`
+            : `${API_BASE}/courses`,
+          {
+            method: editar
+              ? "PUT"
+              : "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify(
+              payload
+            ),
+          }
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(() => null);
+
+      if (!resposta.ok) {
+        throw new Error(
+          mensagemErro(
+            dados,
+            "Não foi possível guardar o curso."
+          )
+        );
+      }
+
+      await onSaved(
+        dados,
+        editar
+          ? "Curso actualizado com sucesso."
+          : "Curso criado com sucesso."
+      );
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Não foi possível guardar o curso."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      wide
+      title={
+        editar
+          ? "Editar curso"
+          : "Novo curso"
+      }
+      subtitle="Título, descrição, link e exactamente 10 perguntas."
+      onClose={onClose}
+    >
+      <form
+        onSubmit={guardar}
+        className="p-6"
+      >
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setErro("");
+              setEtapa(1);
+            }}
+            className={`rounded-xl px-4 py-3 text-sm font-black ${
+              etapa === 1
+                ? "bg-blue-600 text-white"
+                : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            Dados do curso
+          </button>
+
+          <button
+            type="button"
+            onClick={continuar}
+            className={`rounded-xl px-4 py-3 text-sm font-black ${
+              etapa === 2
+                ? "bg-blue-600 text-white"
+                : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            10 perguntas
+          </button>
+        </div>
+
+        {erro ? (
+          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {erro}
+          </div>
+        ) : null}
+
+        {etapa === 1 ? (
+          <div className="mt-6 space-y-5">
+            <Campo
+              label="Título"
+              value={titulo}
+              onChange={setTitulo}
+              placeholder="Título do curso"
+            />
+
+            <Campo
+              label="Descrição"
+              value={descricao}
+              onChange={setDescricao}
+              placeholder="Descrição do curso"
+              textarea
+            />
+
+            <Campo
+              label="Link do curso"
+              value={link}
+              onChange={setLink}
+              placeholder="https://exemplo.com/curso"
+            />
+
+            <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div>
+                <p className="text-sm font-black text-slate-900">
+                  Estado de publicação
+                </p>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Disponível para os estudantes.
+                </p>
+              </div>
+
+              <input
+                type="checkbox"
+                checked={publicado}
+                onChange={(event) =>
+                  setPublicado(
+                    event.target.checked
+                  )
+                }
+                className="h-5 w-5 accent-blue-600"
+              />
+            </label>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={continuar}
+                className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-700"
+              >
+                Continuar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-5">
+            {perguntas.map(
+              (pergunta, index) => (
+                <div
+                  key={
+                    pergunta.id ||
+                    `nova-${index}`
+                  }
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-5"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">
+                        Pergunta {index + 1}
+                      </span>
+
+                      <p className="mt-1 text-sm font-black text-slate-900">
+                        Questão e opções
+                      </p>
+                    </div>
+
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-sm font-black text-blue-700">
+                      {index + 1}
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-4">
+                    <Campo
+                      label="Pergunta"
+                      value={
+                        pergunta.question
+                      }
+                      onChange={(valor) =>
+                        atualizarPergunta(
+                          index,
+                          "question",
+                          valor
+                        )
+                      }
+                      placeholder="Escreva a pergunta."
+                      textarea
+                    />
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {pergunta.options.map(
+                        (
+                          opcao,
+                          opcaoIndex
+                        ) => (
+                          <div
+                            key={
+                              opcaoIndex
+                            }
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">
+                                Opção {opcaoIndex + 1}
+                              </span>
+
+                              <label className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                                <input
+                                  type="radio"
+                                  name={`correct-new-${index}`}
+                                  checked={
+                                    Number(
+                                      pergunta.correct_answer
+                                    ) ===
+                                    opcaoIndex
+                                  }
+                                  onChange={() =>
+                                    atualizarPergunta(
+                                      index,
+                                      "correct_answer",
+                                      opcaoIndex
+                                    )
+                                  }
+                                  className="accent-blue-600"
+                                />
+                                correcta
+                              </label>
+                            </div>
+
+                            <input
+                              value={opcao}
+                              onChange={(
+                                event
+                              ) =>
+                                atualizarOpcao(
+                                  index,
+                                  opcaoIndex,
+                                  event.target
+                                    .value
+                                )
+                              }
+                              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                            />
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
+
+            <div className="flex justify-between gap-3 border-t border-slate-200 pt-5">
+              <button
+                type="button"
+                onClick={() => {
+                  setErro("");
+                  setEtapa(1);
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600"
+              >
+                Voltar
+              </button>
+
+              <button
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? (
+                  <LoaderCircle
+                    size={17}
+                    className="animate-spin"
+                  />
+                ) : null}
+
+                {saving
+                  ? "A guardar..."
+                  : editar
+                    ? "Actualizar curso"
+                    : "Criar curso"}
+              </button>
+            </div>
+          </div>
+        )}
+      </form>
+    </Modal>
+  );
+}
+
+function PerguntasModal({
+  curso,
+  onClose,
+  onUpdated,
+}) {
+  const [perguntas, setPerguntas] =
+    useState(
+      normalizarPerguntas(
+        curso.questions
+      )
+    );
+
+  const [indice, setIndice] =
+    useState(0);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [erro, setErro] =
+    useState("");
+
+  const pergunta =
+    perguntas[indice];
+
+  function atualizarCampo(
+    campo,
+    valor
+  ) {
+    setPerguntas((actual) =>
+      actual.map((item, index) =>
+        index === indice
+          ? {
+              ...item,
+              [campo]: valor,
+            }
+          : item
+      )
+    );
+  }
+
+  function atualizarOpcao(
+    opcaoIndex,
+    valor
+  ) {
+    setPerguntas((actual) =>
+      actual.map((item, index) => {
+        if (index !== indice) {
+          return item;
+        }
+
+        return {
+          ...item,
+          options: item.options.map(
+            (opcao, indexOpcao) =>
+              indexOpcao === opcaoIndex
+                ? valor
+                : opcao
+          ),
+        };
+      })
+    );
+  }
+
+  async function guardar() {
+    setErro("");
+
+    if (!pergunta?.id) {
+      setErro(
+        "Esta pergunta não possui um ID válido."
+      );
+      return;
+    }
+
+    if (!pergunta.question.trim()) {
+      setErro(
+        "A pergunta é obrigatória."
+      );
+      return;
+    }
+
+    if (
+      pergunta.options.some(
+        (opcao) => !String(opcao).trim()
+      )
+    ) {
+      setErro(
+        "As quatro opções são obrigatórias."
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const resposta =
+        await fetch(
+          `${API_BASE}/courses/${curso.id}/questions/${pergunta.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              question:
+                pergunta.question.trim(),
+              options:
+                pergunta.options.map(
+                  (opcao) =>
+                    opcao.trim()
+                ),
+              correct_answer:
+                Number(
+                  pergunta.correct_answer
+                ),
+            }),
+          }
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(() => null);
+
+      if (!resposta.ok) {
+        throw new Error(
+          mensagemErro(
+            dados,
+            "Não foi possível actualizar a pergunta."
+          )
+        );
+      }
+
+      setPerguntas(
+        normalizarPerguntas(
+          dados.questions
+        )
+      );
+
+      onUpdated(
+        dados,
+        `Pergunta ${indice + 1} actualizada com sucesso.`
+      );
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Não foi possível actualizar a pergunta."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      wide
+      title={`Perguntas · ${curso.title}`}
+      subtitle="10 perguntas, 4 opções por pergunta e uma resposta correcta."
+      onClose={onClose}
+    >
+      <div className="grid gap-6 p-6 lg:grid-cols-[220px_1fr]">
+        <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <p className="px-2 pb-3 text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">
+            Navegação
+          </p>
+
+          <div className="grid grid-cols-5 gap-2 lg:grid-cols-1">
+            {perguntas.map(
+              (item, index) => (
+                <button
+                  key={
+                    item.id ||
+                    `q-${index}`
+                  }
+                  type="button"
+                  onClick={() => {
+                    setErro("");
+                    setIndice(index);
+                  }}
+                  className={`rounded-xl px-3 py-2 text-left text-xs font-black ${
+                    indice === index
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-slate-600 hover:bg-blue-50"
+                  }`}
+                >
+                  Pergunta {index + 1}
+                </button>
+              )
+            )}
+          </div>
+        </aside>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          {erro ? (
+            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {erro}
+            </div>
+          ) : null}
+
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">
+                Pergunta {indice + 1}
+              </span>
+
+              <h3 className="mt-1 text-lg font-black text-slate-950">
+                Editar pergunta
+              </h3>
+            </div>
+
+            <FileQuestion
+              className="text-blue-600"
+              size={24}
+            />
+          </div>
+
+          <div className="space-y-5">
+            <Campo
+              label="Pergunta"
+              value={
+                pergunta?.question || ""
+              }
+              onChange={(valor) =>
+                atualizarCampo(
+                  "question",
+                  valor
+                )
+              }
+              placeholder="Escreva a pergunta."
+              textarea
+            />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {(
+                pergunta?.options || []
+              ).map(
+                (
+                  opcao,
+                  opcaoIndex
+                ) => (
+                  <div
+                    key={
+                      opcaoIndex
+                    }
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">
+                        Opção {opcaoIndex + 1}
+                      </span>
+
+                      <label className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                        <input
+                          type="radio"
+                          name={`correct-edit-${curso.id}`}
+                          checked={
+                            Number(
+                              pergunta.correct_answer
+                            ) ===
+                            opcaoIndex
+                          }
+                          onChange={() =>
+                            atualizarCampo(
+                              "correct_answer",
+                              opcaoIndex
+                            )
+                          }
+                          className="accent-blue-600"
+                        />
+                        correcta
+                      </label>
+                    </div>
+
+                    <input
+                      value={opcao}
+                      onChange={(event) =>
+                        atualizarOpcao(
+                          opcaoIndex,
+                          event.target
+                            .value
+                        )
+                      }
+                      className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+                    />
+                  </div>
+                )
+              )}
+            </div>
+
+            <div className="flex flex-wrap justify-between gap-3 border-t border-slate-200 pt-5">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={
+                    indice === 0
+                  }
+                  onClick={() =>
+                    setIndice(
+                      (valor) =>
+                        Math.max(
+                          0,
+                          valor - 1
+                        )
+                    )
+                  }
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 disabled:opacity-40"
+                >
+                  Anterior
+                </button>
+
+                <button
+                  type="button"
+                  disabled={
+                    indice ===
+                    TOTAL_PERGUNTAS - 1
+                  }
+                  onClick={() =>
+                    setIndice(
+                      (valor) =>
+                        Math.min(
+                          TOTAL_PERGUNTAS -
+                            1,
+                          valor + 1
+                        )
+                    )
+                  }
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 disabled:opacity-40"
+                >
+                  Próxima
+                </button>
+              </div>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={guardar}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white disabled:opacity-60"
+              >
+                {saving ? (
+                  <LoaderCircle
+                    size={16}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Check size={16} />
+                )}
+
+                {saving
+                  ? "A guardar..."
+                  : "Guardar pergunta"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+export default function AdminCoursesPage() {
+  const [cursos, setCursos] =
+    useState([]);
+
+  const [pesquisa, setPesquisa] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [modal, setModal] =
+    useState(null);
+
+  const [toast, setToast] =
+    useState(null);
+
+  function mostrarToast(
+    message,
+    type = "success"
+  ) {
+    setToast({
+      message,
+      type,
+    });
+  }
+
+  async function carregarCursos() {
+    setLoading(true);
+
+    try {
+      const resposta =
+        await fetch(
+          `${API_BASE}/courses`
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(() => null);
+
+      if (!resposta.ok) {
+        throw new Error(
+          mensagemErro(
+            dados,
+            "Não foi possível carregar os cursos."
+          )
+        );
+      }
+
+      setCursos(
+        Array.isArray(dados)
+          ? dados
+          : []
+      );
+    } catch (error) {
+      mostrarToast(
+        error?.message ||
+          "Não foi possível carregar os cursos.",
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarCursos();
+  }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timer =
+      setTimeout(
+        () => setToast(null),
+        4000
+      );
+
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const filtrados = useMemo(() => {
+    const termo =
+      pesquisa.trim().toLowerCase();
+
+    if (!termo) {
+      return cursos;
+    }
+
+    return cursos.filter(
+      (curso) =>
+        String(
+          curso.title || ""
+        )
+          .toLowerCase()
+          .includes(termo) ||
+        String(
+          curso.description || ""
+        )
+          .toLowerCase()
+          .includes(termo)
+    );
+  }, [cursos, pesquisa]);
+
+  async function guardarCurso(
+    dados,
+    mensagem
+  ) {
+    setCursos((actual) => {
+      const existe =
+        actual.some(
+          (item) =>
+            item.id === dados.id
+        );
+
+      return existe
+        ? actual.map((item) =>
+            item.id === dados.id
+              ? dados
+              : item
+          )
+        : [...actual, dados];
+    });
+
+    setModal(null);
+    mostrarToast(mensagem);
+  }
+
+  async function alternarPublicacao(
+    curso
+  ) {
+    try {
+      const resposta =
+        await fetch(
+          `${API_BASE}/courses/${curso.id}/publish`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              published:
+                curso.published === false,
+            }),
+          }
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(() => null);
+
+      if (!resposta.ok) {
+        throw new Error(
+          mensagemErro(
+            dados,
+            "Não foi possível alterar a publicação."
+          )
+        );
+      }
+
+      setCursos((actual) =>
+        actual.map((item) =>
+          item.id === curso.id
+            ? dados
+            : item
+        )
+      );
+
+      mostrarToast(
+        dados.published
+          ? "Curso publicado."
+          : "Curso retirado da publicação."
+      );
+    } catch (error) {
+      mostrarToast(
+        error?.message ||
+          "Não foi possível alterar o estado.",
+        "error"
+      );
+    }
+  }
+
+  async function eliminarCurso(
+    curso
+  ) {
+    const confirmar =
+      window.confirm(
+        `Tem a certeza que deseja eliminar o curso "${curso.title}"?\n\nEsta operação remove o curso da base de dados.`
+      );
+
+    if (!confirmar) {
+      return;
+    }
+
+    try {
+      const resposta =
+        await fetch(
+          `${API_BASE}/courses/${curso.id}?confirm=true`,
+          {
+            method: "DELETE",
+          }
+        );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(() => null);
+
+      if (!resposta.ok) {
+        throw new Error(
+          mensagemErro(
+            dados,
+            "Não foi possível eliminar o curso."
+          )
+        );
+      }
+
+      setCursos((actual) =>
+        actual.filter(
+          (item) =>
+            item.id !== curso.id
+        )
+      );
+
+      mostrarToast(
+        "Curso eliminado com sucesso."
+      );
+    } catch (error) {
+      mostrarToast(
+        error?.message ||
+          "Não foi possível eliminar o curso.",
+        "error"
+      );
+    }
+  }
+
+  function abrirLink(curso) {
+    const link =
+      String(
+        curso?.link || ""
+      ).trim();
+
+    if (!link) {
+      mostrarToast(
+        "Este curso ainda não possui um link.",
+        "error"
+      );
+      return;
+    }
+
+    window.open(
+      link,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  function actualizarDepoisPergunta(
+    dados,
+    mensagem
+  ) {
+    setCursos((actual) =>
+      actual.map((item) =>
+        item.id === dados.id
+          ? dados
+          : item
+      )
+    );
+
+    mostrarToast(mensagem);
+  }
+
+  const total = cursos.length;
+
+  const publicados =
+    cursos.filter(
+      (curso) =>
+        curso.published !== false
+    ).length;
+
+  const rascunhos =
+    total - publicados;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-blue-600">
+            <ShieldCheck size={17} />
+
+            <span className="text-xs font-black uppercase tracking-[0.16em]">
+              Administração
+            </span>
+          </div>
+
+          <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-950">
+            Cursos
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-500">
+            Gestão dos cursos de formação em cibersegurança do SICSI.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={carregarCursos}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm hover:border-blue-200 hover:text-blue-700 disabled:opacity-50"
+          >
+            <RefreshCw
+              size={16}
+              className={
+                loading
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+            Actualizar
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setModal({
+                type: "curso",
+                curso: null,
+              })
+            }
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700"
+          >
+            <Plus size={17} />
+            Novo curso
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <BookOpen className="h-5 w-5 text-blue-600" />
+
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            Total de cursos
+          </p>
+
+          <p className="mt-1 text-3xl font-black text-slate-950">
+            {total}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <Eye className="h-5 w-5 text-emerald-600" />
+
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            Publicados
+          </p>
+
+          <p className="mt-1 text-3xl font-black text-slate-950">
+            {publicados}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <EyeOff className="h-5 w-5 text-amber-600" />
+
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            Não publicados
+          </p>
+
+          <p className="mt-1 text-3xl font-black text-slate-950">
+            {rascunhos}
+          </p>
+        </div>
+      </div>
+
+      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 p-4 sm:p-5">
+          <div className="relative">
+            <Search
+              size={18}
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+
+            <input
+              value={pesquisa}
+              onChange={(event) =>
+                setPesquisa(
+                  event.target.value
+                )
+              }
+              placeholder="Pesquisar curso..."
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pl-11 text-sm font-semibold outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex min-h-[300px] items-center justify-center">
+            <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
+              <LoaderCircle
+                size={20}
+                className="animate-spin text-blue-600"
+              />
+              A carregar cursos...
+            </div>
+          </div>
+        ) : filtrados.length === 0 ? (
+          <div className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center">
+            <BookOpen
+              size={42}
+              className="text-slate-300"
+            />
+
+            <h2 className="mt-4 text-lg font-black text-slate-900">
+              Nenhum curso encontrado
+            </h2>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[1250px] w-full">
+              <thead>
+                <tr className="border-b border-slate-100 text-left text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">
+                  <th className="px-5 py-4">
+                    Curso
+                  </th>
+
+                  <th className="px-5 py-4">
+                    Avaliação
+                  </th>
+
+                  <th className="px-5 py-4">
+                    Link
+                  </th>
+
+                  <th className="px-5 py-4">
+                    Estado
+                  </th>
+
+                  <th className="px-5 py-4 text-right">
+                    Acções
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filtrados.map(
+                  (curso) => (
+                    <tr
+                      key={
+                        curso.id
+                      }
+                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60"
+                    >
+                      <td className="px-5 py-5">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/15">
+                            <BookOpen
+                              size={20}
+                            />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="max-w-[370px] truncate text-sm font-black text-slate-950">
+                              {
+                                curso.title
+                              }
+                            </p>
+
+                            <p className="mt-1 max-w-[430px] truncate text-xs text-slate-500">
+                              {
+                                curso.description ||
+                                  "Sem descrição"
+                              }
+                            </p>
+
+                            <p className="mt-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">
+                              {curso.id}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-5">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-black text-indigo-700">
+                          <FileQuestion
+                            size={
+                              13
+                            }
+                          />
+
+                          {curso.questions_count ??
+                            curso.questions
+                              ?.length ??
+                            0}
+                          /10
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-5">
+                        {curso.link ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              abrirLink(
+                                curso
+                              )
+                            }
+                            className="inline-flex max-w-[250px] items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-left text-xs font-bold text-blue-700 hover:bg-blue-50"
+                            title={
+                              curso.link
+                            }
+                          >
+                            <Link2
+                              size={
+                                14
+                              }
+                            />
+
+                            <span className="truncate">
+                              {
+                                curso.link
+                              }
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-xs font-semibold text-slate-400">
+                            Sem link
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-5 py-5">
+                        <StatusBadge
+                          publicado={
+                            curso.published !==
+                            false
+                          }
+                        />
+                      </td>
+
+                      <td className="px-5 py-5">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {curso.link ? (
+                            <Acao
+                              icon={
+                                ExternalLink
+                              }
+                              onClick={() =>
+                                abrirLink(
+                                  curso
+                                )
+                              }
+                            >
+                              Abrir
+                            </Acao>
+                          ) : null}
+
+                          <Acao
+                            icon={
+                              Edit3
+                            }
+                            onClick={() =>
+                              setModal({
+                                type: "curso",
+                                curso,
+                              })
+                            }
+                          >
+                            Editar
+                          </Acao>
+
+                          <Acao
+                            icon={
+                              FileQuestion
+                            }
+                            onClick={() =>
+                              setModal({
+                                type: "perguntas",
+                                curso,
+                              })
+                            }
+                          >
+                            Perguntas
+                          </Acao>
+
+                          <Acao
+                            icon={
+                              curso.published !==
+                              false
+                                ? EyeOff
+                                : Eye
+                            }
+                            onClick={() =>
+                              alternarPublicacao(
+                                curso
+                              )
+                            }
+                          >
+                            {curso.published !==
+                            false
+                              ? "Ocultar"
+                              : "Publicar"}
+                          </Acao>
+
+                          <Acao
+                            icon={
+                              Trash2
+                            }
+                            danger
+                            onClick={() =>
+                              eliminarCurso(
+                                curso
+                              )
+                            }
+                          >
+                            Eliminar
+                          </Acao>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {modal?.type ===
+      "curso" ? (
+        <CursoModal
+          key={
+            modal.curso?.id ||
+            "novo"
+          }
+          curso={
+            modal.curso
+          }
+          onClose={() =>
+            setModal(null)
+          }
+          onSaved={
+            guardarCurso
+          }
+        />
+      ) : null}
+
+      {modal?.type ===
+      "perguntas" ? (
+        <PerguntasModal
+          key={
+            modal.curso.id
+          }
+          curso={
+            cursos.find(
+              (item) =>
+                item.id ===
+                modal.curso.id
+            ) ||
+            modal.curso
+          }
+          onClose={() =>
+            setModal(null)
+          }
+          onUpdated={
+            actualizarDepoisPergunta
+          }
+        />
+      ) : null}
+
+      {toast ? (
+        <div
+          className={`fixed bottom-5 right-5 z-[80] rounded-2xl px-5 py-3 text-sm font-bold text-white shadow-2xl ${
+            toast.type === "error"
+              ? "bg-red-600"
+              : "bg-slate-950"
+          }`}
+        >
+          {toast.message}
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,806 @@
+﻿
+import { useEffect, useMemo, useState } from "react";
+import {
+  Check,
+  CheckCircle2,
+  Eye,
+  LoaderCircle,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  UserCog,
+  Users,
+  X,
+  XCircle,
+} from "lucide-react";
+
+const API = "http://127.0.0.1:8000/api";
+
+async function api(
+  endpoint,
+  options = {}
+) {
+  const response = await fetch(
+    `${API}${endpoint}`,
+    {
+      headers: {
+        "Content-Type":
+          "application/json",
+        ...(options.headers || {}),
+      },
+      ...options,
+    }
+  );
+
+  const data =
+    await response
+      .json()
+      .catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.detail === "string"
+        ? data.detail
+        : "Não foi possível comunicar com o servidor."
+    );
+  }
+
+  return data;
+}
+
+function iniciais(nome) {
+  const partes = String(
+    nome || ""
+  )
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!partes.length) {
+    return "U";
+  }
+
+  if (partes.length === 1) {
+    return partes[0]
+      .charAt(0)
+      .toUpperCase();
+  }
+
+  return (
+    partes[0].charAt(0) +
+    partes[partes.length - 1].charAt(0)
+  ).toUpperCase();
+}
+
+function formatarData(valor) {
+  if (!valor) {
+    return "Sem registo";
+  }
+
+  const data =
+    new Date(valor);
+
+  if (Number.isNaN(data.getTime())) {
+    return String(valor);
+  }
+
+  return data.toLocaleDateString(
+    "pt-PT",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  );
+}
+
+function RoleBadge({ role }) {
+  const admin =
+    role === "admin";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black ${
+        admin
+          ? "bg-blue-100 text-blue-700"
+          : "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {admin ? (
+        <ShieldCheck size={13} />
+      ) : (
+        <Users size={13} />
+      )}
+
+      {admin
+        ? "Administrador"
+        : "Estudante"}
+    </span>
+  );
+}
+
+function ActionButton({
+  children,
+  icon: Icon,
+  onClick,
+  danger = false,
+  disabled = false,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-black transition ${
+        danger
+          ? "border border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100"
+          : "border border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+      } disabled:cursor-not-allowed disabled:opacity-50`}
+    >
+      <Icon size={15} />
+      {children}
+    </button>
+  );
+}
+
+function UserDetailsModal({
+  user,
+  onClose,
+}) {
+  if (!user) {
+    return null;
+  }
+
+  const cursos =
+    Array.isArray(
+      user.enrolled_courses
+    )
+      ? user.enrolled_courses
+      : [];
+
+  const concluidos =
+    Array.isArray(
+      user.completed_courses
+    )
+      ? user.completed_courses
+      : [];
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
+        <div className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 px-6 py-7 text-white">
+          <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+
+          <div className="relative flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-lg font-black backdrop-blur">
+                {iniciais(
+                  user.name
+                )}
+              </div>
+
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-100">
+                  Perfil do utilizador
+                </p>
+
+                <h2 className="mt-1 text-xl font-black">
+                  {user.name ||
+                    "Utilizador"}
+                </h2>
+
+                <p className="mt-1 text-sm text-blue-100">
+                  {user.email ||
+                    "Sem e-mail"}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                onClose
+              }
+              className="rounded-xl p-2 text-white/80 hover:bg-white/10 hover:text-white"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-5 p-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Perfil
+              </p>
+
+              <div className="mt-2">
+                <RoleBadge
+                  role={user.role}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                Registado em
+              </p>
+
+              <p className="mt-2 text-sm font-black text-slate-900">
+                {formatarData(
+                  user.created_at
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <p className="text-2xl font-black text-blue-700">
+                {cursos.length}
+              </p>
+
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-blue-500">
+                Cursos inscritos
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+              <p className="text-2xl font-black text-emerald-700">
+                {concluidos.length}
+              </p>
+
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-emerald-500">
+                Cursos conclu?dos
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4">
+              <p className="text-2xl font-black text-violet-700">
+                {user.assessment_score ??
+                  0}
+              </p>
+
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-violet-500">
+                Avaliação inicial
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 p-4">
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              Nível de consciencializa??o
+            </p>
+
+            <p className="mt-2 text-sm font-black text-slate-900">
+              {user.awareness_level ||
+                "Ainda não definido"}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              onClose
+            }
+            className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminUsersPage() {
+  const [users, setUsers] =
+    useState([]);
+
+  const [search, setSearch] =
+    useState("");
+
+  const [roleFilter, setRoleFilter] =
+    useState("all");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const [toast, setToast] =
+    useState("");
+
+  const [selectedUser, setSelectedUser] =
+    useState(null);
+
+  async function loadUsers() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data =
+        await api("/users");
+
+      setUsers(
+        Array.isArray(data)
+          ? data
+          : []
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Não foi possível carregar os utilizadores."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return undefined;
+    }
+
+    const timer =
+      setTimeout(
+        () =>
+          setToast(""),
+        4000
+      );
+
+    return () =>
+      clearTimeout(timer);
+  }, [toast]);
+
+  async function toggleRole(
+    target
+  ) {
+    const nextRole =
+      target.role === "admin"
+        ? "student"
+        : "admin";
+
+    const confirmar =
+      window.confirm(
+        nextRole === "admin"
+          ? `Promover ${target.name} a administrador?`
+          : `Remover privil?gios de administrador de ${target.name}?`
+      );
+
+    if (!confirmar) {
+      return;
+    }
+
+    try {
+      await api(
+        `/users/${target.id}/role`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            role: nextRole,
+          }),
+        }
+      );
+
+      await loadUsers();
+
+      setToast(
+        nextRole === "admin"
+          ? "Utilizador promovido a administrador."
+          : "Utilizador voltou a ser estudante."
+      );
+    } catch (err) {
+      setError(
+        err.message ||
+          "Não foi possível alterar o perfil."
+      );
+    }
+  }
+
+  const filteredUsers =
+    useMemo(() => {
+      const termo =
+        search
+          .trim()
+          .toLowerCase();
+
+      return users.filter(
+        (user) => {
+          const searchMatch =
+            !termo ||
+            String(
+              user.name || ""
+            )
+              .toLowerCase()
+              .includes(
+                termo
+              ) ||
+            String(
+              user.email || ""
+            )
+              .toLowerCase()
+              .includes(
+                termo
+              );
+
+          const roleMatch =
+            roleFilter === "all" ||
+            user.role ===
+              roleFilter;
+
+          return (
+            searchMatch &&
+            roleMatch
+          );
+        }
+      );
+    }, [
+      users,
+      search,
+      roleFilter,
+    ]);
+
+  const total =
+    users.length;
+
+  const admins =
+    users.filter(
+      (item) =>
+        item.role ===
+        "admin"
+    ).length;
+
+  const estudantes =
+    total - admins;
+
+  return (
+    <div className="space-y-6">
+      {/* HERO */}
+
+      <section className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-700 p-6 text-white shadow-2xl shadow-blue-600/20 lg:p-8">
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-cyan-300/10 blur-3xl" />
+
+        <div className="relative grid gap-6 lg:grid-cols-[1.5fr_1fr_auto] lg:items-center">
+          <div>
+            <div className="flex items-center gap-2 text-blue-100">
+              <Users
+                size={18}
+              />
+
+              <span className="text-[11px] font-black uppercase tracking-[0.18em]">
+                Administração
+              </span>
+            </div>
+
+            <h1 className="mt-2 text-3xl font-black tracking-tight lg:text-4xl">
+              Utilizadores
+            </h1>
+
+            <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100 lg:text-base">
+              Consulte as contas da plataforma e acompanhe os perfis de acesso ao SICSI III.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <Users size={18} />
+
+              <p className="mt-2 text-2xl font-black">
+                {total}
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                Total
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <ShieldCheck
+                size={18}
+              />
+
+              <p className="mt-2 text-2xl font-black">
+                {admins}
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                Admins
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <CheckCircle2
+                size={18}
+              />
+
+              <p className="mt-2 text-2xl font-black">
+                {estudantes}
+              </p>
+
+              <p className="text-[10px] font-bold uppercase tracking-wider text-blue-100">
+                Estudantes
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              loadUsers
+            }
+            disabled={
+              loading
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3.5 text-sm font-black text-blue-700 shadow-xl transition hover:-translate-y-0.5 disabled:opacity-50"
+          >
+            <RefreshCw
+              size={17}
+              className={
+                loading
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+            Actualizar
+          </button>
+        </div>
+      </section>
+
+      {/* PESQUISA */}
+
+      <section className="flex flex-col gap-3 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm lg:flex-row">
+        <div className="relative flex-1">
+          <Search
+            size={18}
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+          />
+
+          <input
+            value={
+              search
+            }
+            onChange={(
+              event
+            ) =>
+              setSearch(
+                event.target
+                  .value
+              )
+            }
+            placeholder="Pesquisar por nome ou e-mail..."
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 pl-11 text-sm font-semibold !text-slate-900 placeholder:text-slate-400 outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+            style={{
+              color:
+                "#0f172a",
+              WebkitTextFillColor:
+                "#0f172a",
+            }}
+          />
+        </div>
+
+        <div className="flex rounded-2xl bg-slate-100 p-1">
+          {[
+            [
+              "all",
+              "Todos",
+            ],
+            [
+              "student",
+              "Estudantes",
+            ],
+            [
+              "admin",
+              "Administradores",
+            ],
+          ].map(
+            ([value, label]) => (
+              <button
+                key={
+                  value
+                }
+                type="button"
+                onClick={() =>
+                  setRoleFilter(
+                    value
+                  )
+                }
+                className={`rounded-xl px-4 py-2.5 text-xs font-black transition ${
+                  roleFilter ===
+                  value
+                    ? "bg-white text-blue-700 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {label}
+              </button>
+            )
+          )}
+        </div>
+      </section>
+
+      {/* LISTA */}
+
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <section className="flex min-h-[330px] items-center justify-center rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-3 text-sm font-bold text-slate-500">
+            <LoaderCircle
+              size={22}
+              className="animate-spin text-blue-600"
+            />
+            A carregar utilizadores...
+          </div>
+        </section>
+      ) : filteredUsers.length ===
+        0 ? (
+        <section className="flex min-h-[330px] flex-col items-center justify-center rounded-[28px] border border-dashed border-slate-300 bg-white p-8 text-center">
+          <Users
+            size={45}
+            className="text-slate-300"
+          />
+
+          <h2 className="mt-4 text-lg font-black text-slate-900">
+            Nenhum utilizador encontrado
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Tente alterar a pesquisa ou o filtro.
+          </p>
+        </section>
+      ) : (
+        <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {filteredUsers.map(
+            (item) => (
+              <article
+                key={
+                  item.id
+                }
+                className="group overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+              >
+                <div className="relative bg-gradient-to-br from-slate-50 via-white to-blue-50 p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-sm font-black text-white shadow-lg shadow-blue-600/20">
+                        {iniciais(
+                          item.name
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <h2 className="truncate text-sm font-black text-slate-950">
+                          {item.name ||
+                            "Utilizador"}
+                        </h2>
+
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {item.email ||
+                            "Sem e-mail"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <RoleBadge
+                      role={
+                        item.role
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="p-5">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                        Nível
+                      </p>
+
+                      <p className="mt-1 truncate text-sm font-black text-slate-900">
+                        {item.awareness_level ||
+                          "?"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl bg-slate-50 p-3">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                        Avaliação
+                      </p>
+
+                      <p className="mt-1 text-sm font-black text-slate-900">
+                        {item.assessment_score ??
+                          0}
+                        %
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-2xl border border-slate-100 px-4 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      Registado
+                    </p>
+
+                    <p className="mt-1 text-xs font-bold text-slate-700">
+                      {formatarData(
+                        item.created_at
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <ActionButton
+                      icon={
+                        Eye
+                      }
+                      onClick={() =>
+                        setSelectedUser(
+                          item
+                        )
+                      }
+                    >
+                      Ver perfil
+                    </ActionButton>
+
+                    <ActionButton
+                      icon={
+                        item.role ===
+                        "admin"
+                          ? XCircle
+                          : Check
+                      }
+                      onClick={() =>
+                        toggleRole(
+                          item
+                        )
+                      }
+                      danger={
+                        item.role ===
+                        "admin"
+                      }
+                    >
+                      {item.role ===
+                      "admin"
+                        ? "Remover admin"
+                        : "Promover admin"}
+                    </ActionButton>
+                  </div>
+                </div>
+              </article>
+            )
+          )}
+        </section>
+      )}
+
+      {selectedUser ? (
+        <UserDetailsModal
+          user={
+            selectedUser
+          }
+          onClose={() =>
+            setSelectedUser(
+              null
+            )
+          }
+        />
+      ) : null}
+
+      {toast ? (
+        <div className="fixed bottom-5 right-5 z-[120] rounded-2xl bg-slate-950 px-5 py-3 text-sm font-bold text-white shadow-2xl">
+          {toast}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+

@@ -1,0 +1,2380 @@
+﻿import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  AlertTriangle,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ClipboardCheck,
+  Copy,
+  Edit3,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  FileQuestion,
+  GraduationCap,
+  Layers3,
+  Link2,
+  LoaderCircle,
+  Plus,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
+
+const API_BASE = "http://127.0.0.1:8000/api";
+
+const TOTAL_PERGUNTAS = 10;
+const OPCOES_POR_PERGUNTA = 4;
+
+const OPCOES_LETRAS = ["A", "B", "C", "D"];
+
+const CURSO_VAZIO = {
+  title: "",
+  description: "",
+  level: "Básico",
+  published: true,
+  image_url: "",
+  link: "",
+};
+
+function novaPergunta(numero) {
+  return {
+    id: null,
+    numero,
+    question: "",
+    options: ["", "", "", ""],
+    correct_answer: 0,
+    explanation: "",
+  };
+}
+
+function perguntasVazias() {
+  return Array.from(
+    { length: TOTAL_PERGUNTAS },
+    (_, index) => novaPergunta(index + 1)
+  );
+}
+
+function obterLinkCurso(id) {
+  if (!id) return "";
+  return `${window.location.origin}/admin/cursos/${id}/visualizar`;
+}
+
+function normalizarCursos(data) {
+  if (!Array.isArray(data)) return [];
+
+  return data.map((curso) => ({
+    ...curso,
+    id: String(curso?.id || ""),
+    title: String(curso?.title || ""),
+    description: String(curso?.description || ""),
+    level: curso?.level || "Básico",
+    published: Boolean(curso?.published),
+    image_url: String(curso?.image_url || ""),
+    link: String(curso?.link || ""),
+    lessons: Array.isArray(curso?.lessons)
+      ? curso.lessons
+      : [],
+    questions: Array.isArray(curso?.questions)
+      ? curso.questions
+      : [],
+    lessons_count:
+      Number(curso?.lessons_count) ||
+      (Array.isArray(curso?.lessons)
+        ? curso.lessons.length
+        : 0),
+    questions_count:
+      Number(curso?.questions_count) ||
+      (Array.isArray(curso?.questions)
+        ? curso.questions.length
+        : 0),
+  }));
+}
+
+function normalizarPerguntas(perguntas) {
+  const origem = Array.isArray(perguntas)
+    ? perguntas
+    : [];
+
+  return Array.from(
+    { length: TOTAL_PERGUNTAS },
+    (_, index) => {
+      const pergunta = origem[index];
+
+      if (!pergunta) {
+        return novaPergunta(index + 1);
+      }
+
+      const opcoes = Array.isArray(
+        pergunta.options
+      )
+        ? pergunta.options.slice(
+            0,
+            OPCOES_POR_PERGUNTA
+          )
+        : [];
+
+      while (
+        opcoes.length <
+        OPCOES_POR_PERGUNTA
+      ) {
+        opcoes.push("");
+      }
+
+      let resposta = Number(
+        pergunta.correct_answer
+      );
+
+      if (
+        !Number.isInteger(resposta) ||
+        resposta < 0 ||
+        resposta >= OPCOES_POR_PERGUNTA
+      ) {
+        resposta = 0;
+      }
+
+      return {
+        id: pergunta.id || null,
+        numero: index + 1,
+        question:
+          pergunta.question || "",
+        options: opcoes.map((opcao) =>
+          typeof opcao === "string"
+            ? opcao
+            : opcao?.text || ""
+        ),
+        correct_answer: resposta,
+        explanation:
+          pergunta.explanation || "",
+      };
+    }
+  );
+}
+
+function StatusBadge({ publicado }) {
+  return publicado ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      Publicado
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-500">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+      Rascunho
+    </span>
+  );
+}
+
+function BotaoAccao({
+  icon: Icon,
+  children,
+  onClick,
+  title,
+  variant = "default",
+}) {
+  const variantes = {
+    default:
+      "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700",
+    blue:
+      "border-blue-600 bg-blue-600 text-white hover:bg-blue-700",
+    indigo:
+      "border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
+    danger:
+      "border-red-100 bg-red-50 text-red-500 hover:bg-red-100",
+    success:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-[10px] font-bold leading-none transition sm:text-[11px] ${variantes[variant]}`}
+    >
+      {Icon && (
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+      )}
+
+      <span className="hidden sm:inline whitespace-nowrap">
+        {children}
+      </span>
+    </button>
+  );
+}
+
+function DropdownEstado({
+  value,
+  onChange,
+}) {
+  const [aberto, setAberto] = useState(false);
+
+  const opcoes = [
+    {
+      value: "todos",
+      label: "Todos os cursos",
+    },
+    {
+      value: "publicados",
+      label: "Publicados",
+    },
+    {
+      value: "rascunhos",
+      label: "Rascunhos",
+    },
+  ];
+
+  const selecionado =
+    opcoes.find(
+      (item) => item.value === value
+    ) || opcoes[0];
+
+  useEffect(() => {
+    function fechar(event) {
+      if (
+        !event.target.closest(
+          "[data-dropdown-estado]"
+        )
+      ) {
+        setAberto(false);
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      fechar
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        fechar
+      );
+    };
+  }, []);
+
+  return (
+    <div
+      data-dropdown-estado
+      className="relative w-full sm:w-52"
+    >
+      <button
+        type="button"
+        onClick={() =>
+          setAberto((atual) => !atual)
+        }
+        className={`flex h-11 w-full items-center justify-between rounded-2xl border bg-white px-4 text-sm font-semibold transition ${
+          aberto
+            ? "border-blue-300 bg-blue-50/40 text-slate-900 ring-4 ring-blue-100"
+            : "border-slate-200 text-slate-700 hover:border-blue-200 hover:bg-slate-50"
+        }`}
+      >
+        <span>{selecionado.label}</span>
+
+        <ChevronDown
+          className={`h-4 w-4 text-slate-400 transition-transform ${
+            aberto
+              ? "rotate-180 text-blue-600"
+              : ""
+          }`}
+        />
+      </button>
+
+      {aberto && (
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[90] overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl shadow-slate-900/10">
+          {opcoes.map((opcao) => {
+            const ativo =
+              opcao.value === value;
+
+            return (
+              <button
+                key={opcao.value}
+                type="button"
+                onClick={() => {
+                  onChange(opcao.value);
+                  setAberto(false);
+                }}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-left text-sm font-semibold transition ${
+                  ativo
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                }`}
+              >
+                <span>{opcao.label}</span>
+
+                {ativo && (
+                  <Check className="h-4 w-4" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  titulo,
+  valor,
+  descricao,
+  classe,
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div
+        className={`flex h-11 w-11 items-center justify-center rounded-2xl ${classe}`}
+      >
+        <Icon className="h-5 w-5" />
+      </div>
+
+      <p className="mt-5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+        {titulo}
+      </p>
+
+      <p className="mt-1 text-3xl font-black tracking-tight text-slate-950">
+        {valor}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-400">
+        {descricao}
+      </p>
+    </div>
+  );
+}
+
+function CourseItem({
+  curso,
+  numero,
+  onEdit,
+  onTeste,
+  onTogglePublish,
+  onDelete,
+  onCopy,
+}) {
+  const link = obterLinkCurso(curso.id);
+
+  const aulas =
+    Number(curso.lessons_count) ||
+    (Array.isArray(curso.lessons)
+      ? curso.lessons.length
+      : 0);
+
+  const questoes =
+    Number(curso.questions_count) ||
+    (Array.isArray(curso.questions)
+      ? curso.questions.length
+      : 0);
+
+  const imagem =
+    curso.image_url ||
+    curso.thumbnail ||
+    curso.cover_url ||
+    "";
+
+  return (
+    <article className="w-full border-b border-slate-200 py-5 last:border-b-0 sm:py-6">
+      <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 shadow-md shadow-blue-600/15 sm:h-16 sm:w-16">
+            {imagem ? (
+              <img
+                src={imagem}
+                alt=""
+                className="h-full w-full object-cover"
+                onError={(event) => {
+                  event.currentTarget.style.display =
+                    "none";
+                }}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-slate-900 text-blue-300">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-blue-600">
+                Curso{" "}
+                {String(numero).padStart(2, "0")}
+              </span>
+
+              <StatusBadge
+                publicado={curso.published}
+              />
+            </div>
+
+            <h3
+              className="mt-1 truncate text-sm font-black tracking-tight text-slate-950 sm:text-base"
+              title={curso.title}
+            >
+              {curso.title ||
+                "Curso sem título"}
+            </h3>
+
+            <p
+              className="mt-1 line-clamp-2 max-w-3xl text-xs leading-5 text-slate-500 sm:text-sm"
+              title={curso.description}
+            >
+              {curso.description ||
+                "Sem descrição definida."}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-2 lg:hidden">
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[8px] font-black uppercase tracking-wide text-slate-400">
+              Nível
+            </p>
+
+            <p className="mt-1 truncate text-[10px] font-bold text-slate-700">
+              {curso.level || "Básico"}
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[8px] font-black uppercase tracking-wide text-slate-400">
+              Aulas
+            </p>
+
+            <p className="mt-1 text-xs font-black text-slate-800">
+              {aulas}
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[8px] font-black uppercase tracking-wide text-slate-400">
+              Teste
+            </p>
+
+            <p className="mt-1 text-xs font-black text-slate-800">
+              {questoes}/10
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+            <p className="text-[8px] font-black uppercase tracking-wide text-slate-400">
+              Estado
+            </p>
+
+            <div className="mt-1">
+              <StatusBadge
+                publicado={curso.published}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden min-w-0 grid-cols-[90px_75px_90px_minmax(180px,1fr)_auto] items-center gap-4 lg:grid">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Nível
+            </p>
+
+            <span className="mt-1 inline-flex max-w-[88px] rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">
+              {curso.level || "Básico"}
+            </span>
+          </div>
+
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Aulas
+            </p>
+
+            <div className="mt-1 flex items-center gap-1.5 text-sm font-black text-slate-800">
+              <Layers3 className="h-3.5 w-3.5 text-slate-400" />
+              {aulas}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Teste
+            </p>
+
+            <div className="mt-1 flex items-center gap-1.5 text-sm font-black text-slate-800">
+              <FileQuestion className="h-3.5 w-3.5 text-slate-400" />
+              {questoes}/10
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">
+              Endereço do curso
+            </p>
+
+            <div className="mt-1 flex min-w-0 items-center gap-1.5">
+              <Link2 className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+
+              <span
+                className="min-w-0 truncate text-[10px] font-medium text-slate-500"
+                title={link}
+              >
+                {link}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => onCopy(link)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-blue-50 hover:text-blue-600"
+                title="Copiar endereço"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex min-w-max flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
+            {curso.published && (
+              <Link
+                to={`/student/cursos/${curso.id}`}
+                target="_blank"
+                rel="noreferrer"
+                title="Abrir curso"
+                className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-blue-600 bg-blue-600 px-2.5 text-[11px] font-bold text-white transition hover:bg-blue-700"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Abrir
+              </Link>
+            )}
+
+            <BotaoAccao
+              icon={Edit3}
+              onClick={() => onEdit(curso)}
+              title="Editar curso"
+            >
+              Editar
+            </BotaoAccao>
+
+            <BotaoAccao
+              icon={ClipboardCheck}
+              variant="indigo"
+              onClick={() => onTeste(curso)}
+              title="Gerir teste final"
+            >
+              Teste
+            </BotaoAccao>
+
+            <button
+              type="button"
+              onClick={() =>
+                onTogglePublish(curso)
+              }
+              title={
+                curso.published
+                  ? "Ocultar curso"
+                  : "Publicar curso"
+              }
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+            >
+              {curso.published ? (
+                <EyeOff className="h-3.5 w-3.5" />
+              ) : (
+                <Eye className="h-3.5 w-3.5" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onDelete(curso)}
+              title="Eliminar curso"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-500 transition hover:bg-red-100"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="min-w-0 rounded-2xl border border-blue-100 bg-blue-50/50 px-3 py-2.5 lg:hidden">
+          <div className="flex min-w-0 items-center gap-2">
+            <Link2 className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+
+            <span
+              className="min-w-0 flex-1 truncate text-[10px] font-medium text-blue-700"
+              title={link}
+            >
+              {link}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => onCopy(link)}
+              title="Copiar endereço"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm"
+            >
+              <Copy className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-visible whitespace-nowrap lg:hidden">
+          {curso.published ? (
+            <Link
+              to={`/student/cursos/${curso.id}`}
+              target="_blank"
+              rel="noreferrer"
+              title="Abrir curso"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-blue-600 bg-blue-600 text-white transition hover:bg-blue-700 sm:w-auto sm:gap-1.5 sm:px-2.5"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline text-[11px] font-bold">
+                Abrir
+              </span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title="Curso não publicado"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-300"
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          <BotaoAccao
+            icon={Edit3}
+            onClick={() => onEdit(curso)}
+            title="Editar curso"
+          >
+            Editar
+          </BotaoAccao>
+
+          <BotaoAccao
+            icon={ClipboardCheck}
+            variant="indigo"
+            onClick={() => onTeste(curso)}
+            title="Gerir teste final"
+          >
+            Teste
+          </BotaoAccao>
+
+          <button
+            type="button"
+            onClick={() =>
+              onTogglePublish(curso)
+            }
+            title={
+              curso.published
+                ? "Ocultar curso"
+                : "Publicar curso"
+            }
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+          >
+            {curso.published ? (
+              <EyeOff className="h-3.5 w-3.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onDelete(curso)}
+            title="Eliminar curso"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100 bg-red-50 text-red-500 transition hover:bg-red-100"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function CampoCurso({
+  titulo,
+  children,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+        {titulo}
+      </label>
+
+      {children}
+    </div>
+  );
+}
+
+function ModalCurso({
+  aberto,
+  curso,
+  formulario,
+  setFormulario,
+  saving,
+  onClose,
+  onSubmit,
+  onAbrirTeste,
+}) {
+  if (!aberto) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 p-3 backdrop-blur-sm sm:p-5">
+      <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[30px] bg-slate-50 shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-white px-5 py-4 sm:px-7">
+          <div className="min-w-0">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">
+              Gestão de formação
+            </p>
+
+            <h2 className="mt-1 truncate text-xl font-black tracking-tight text-slate-950">
+              {curso ? "Editar curso" : "Novo curso"}
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Defina as informações apresentadas aos estudantes.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 transition hover:bg-slate-200"
+            aria-label="Fechar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form
+          onSubmit={onSubmit}
+          className="min-h-0 overflow-y-auto"
+        >
+          <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_290px] sm:p-7">
+            <div className="space-y-5">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-black text-slate-950">
+                      Informações do curso
+                    </h3>
+
+                    <p className="text-xs text-slate-400">
+                      Nome, descrição e nível.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-4">
+                  <CampoCurso titulo="Nome do curso">
+                    <input
+                      value={formulario.title}
+                      onChange={(event) =>
+                        setFormulario(
+                          (atual) => ({
+                            ...atual,
+                            title:
+                              event.target.value,
+                          })
+                        )
+                      }
+                      placeholder="Ex.: Fundamentos de Segurança Digital"
+                      disabled={saving}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    />
+                  </CampoCurso>
+
+                  <CampoCurso titulo="Descrição">
+                    <textarea
+                      value={formulario.description}
+                      onChange={(event) =>
+                        setFormulario(
+                          (atual) => ({
+                            ...atual,
+                            description:
+                              event.target.value,
+                          })
+                        )
+                      }
+                      rows={5}
+                      placeholder="Descreva o que o estudante vai aprender..."
+                      disabled={saving}
+                      className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    />
+                  </CampoCurso>
+
+                  <CampoCurso titulo="Fotografia do curso">
+                    <input
+                      type="url"
+                      value={formulario.image_url || ""}
+                      onChange={(event) =>
+                        setFormulario((atual) => ({
+                          ...atual,
+                          image_url:
+                            event.target.value,
+                        }))
+                      }
+                      placeholder="https://exemplo.com/fotografia.jpg"
+                      disabled={saving}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    />
+
+                    <p className="mt-2 text-[10px] leading-4 text-slate-400">
+                      Cole o endereço directo da fotografia do curso.
+                    </p>
+                  </CampoCurso>
+
+                  <CampoCurso titulo="Link do curso">
+                    <input
+                      type="url"
+                      value={formulario.link || ""}
+                      onChange={(event) =>
+                        setFormulario((atual) => ({
+                          ...atual,
+                          link:
+                            event.target.value,
+                        }))
+                      }
+                      placeholder="https://exemplo.com/curso"
+                      disabled={saving}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    />
+
+                    <p className="mt-2 text-[10px] leading-4 text-slate-400">
+                      Endereço para aceder ao conteúdo associado ao curso.
+                    </p>
+                  </CampoCurso>
+
+                  <CampoCurso titulo="Nível">
+                    <div className="relative">
+                      <select
+                        value={formulario.level}
+                        onChange={(event) =>
+                          setFormulario(
+                            (atual) => ({
+                              ...atual,
+                              level:
+                                event.target.value,
+                            })
+                          )
+                        }
+                        disabled={saving}
+                        className="w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 pr-10 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                      >
+                        <option value="Básico">
+                          Básico
+                        </option>
+
+                        <option value="Intermédio">
+                          Intermédio
+                        </option>
+
+                        <option value="Avançado">
+                          Avançado
+                        </option>
+                      </select>
+
+                      <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  </CampoCurso>
+
+                  <CampoCurso titulo="Endereço do curso">
+                    <div className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3.5">
+                      <Link2 className="h-4 w-4 shrink-0 text-blue-600" />
+
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium text-blue-700">
+                        {curso
+                          ? obterLinkCurso(
+                              curso.id
+                            )
+                          : "Será gerado automaticamente após criar o curso."}
+                      </span>
+
+                      {curso && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigator.clipboard
+                              .writeText(
+                                obterLinkCurso(
+                                  curso.id
+                                )
+                              )
+                          }
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm"
+                          title="Copiar endereço"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </CampoCurso>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-950">
+                      Disponibilidade
+                    </h3>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      Controle se o curso fica disponível para estudantes.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormulario(
+                        (atual) => ({
+                          ...atual,
+                          published:
+                            !atual.published,
+                        })
+                      )
+                    }
+                    disabled={saving}
+                    className={`flex h-8 w-14 items-center rounded-full p-1 transition ${
+                      formulario.published
+                        ? "bg-emerald-500"
+                        : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`h-6 w-6 rounded-full bg-white shadow-sm transition ${
+                        formulario.published
+                          ? "translate-x-6"
+                          : ""
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="mt-4 flex items-center gap-2">
+                  {formulario.published ? (
+                    <>
+                      <Eye className="h-4 w-4 text-emerald-600" />
+                      <span className="text-xs font-semibold text-emerald-700">
+                        Publicado e disponível
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="h-4 w-4 text-slate-400" />
+                      <span className="text-xs font-semibold text-slate-500">
+                        Guardado como rascunho
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <aside className="space-y-4">
+              <div className="rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
+                  <ClipboardCheck className="h-5 w-5" />
+                </div>
+
+                <h3 className="mt-4 text-sm font-black text-slate-950">
+                  Teste final
+                </h3>
+
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Cada curso deve possuir 10 perguntas,
+                  quatro opções de resposta e uma resposta certa.
+                </p>
+
+                <div className="mt-4 rounded-2xl bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Perguntas
+                    </span>
+
+                    <span className="text-lg font-black text-indigo-700">
+                      {curso
+                        ? `${curso.questions_count || 0}/10`
+                        : "10"}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onAbrirTeste}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-3 py-3 text-xs font-bold text-white transition hover:bg-indigo-700"
+                >
+                  <Settings2Icon />
+                  {curso
+                    ? "Configurar perguntas"
+                    : "Preencher 10 perguntas"}
+                </button>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+
+                  <p className="text-xs leading-5 text-slate-500">
+                    Depois de criar o curso, pode configurar imediatamente o
+                    teste final com as 10 perguntas.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/15 transition hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {saving ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+
+                  {curso
+                    ? "Guardar alterações"
+                    : "Criar curso"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={saving}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </aside>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function Settings2Icon() {
+  return (
+    <span className="inline-flex">
+      <Sparkles className="h-4 w-4" />
+    </span>
+  );
+}
+
+function ModalTeste({
+  aberto,
+  curso,
+  perguntas,
+  setPerguntas,
+  saving,
+  onClose,
+  onSave,
+}) {
+  if (!aberto || !curso) return null;
+
+  const preenchidas =
+    perguntas.filter(
+      (item) => item.question.trim()
+    ).length;
+
+  function alterarPergunta(index, campo, valor) {
+    setPerguntas((atual) =>
+      atual.map((pergunta, i) =>
+        i === index
+          ? {
+              ...pergunta,
+              [campo]: valor,
+            }
+          : pergunta
+      )
+    );
+  }
+
+  function alterarOpcao(
+    perguntaIndex,
+    opcaoIndex,
+    valor
+  ) {
+    setPerguntas((atual) =>
+      atual.map((pergunta, i) =>
+        i === perguntaIndex
+          ? {
+              ...pergunta,
+              options:
+                pergunta.options.map(
+                  (opcao, indice) =>
+                    indice === opcaoIndex
+                      ? valor
+                      : opcao
+                ),
+            }
+          : pergunta
+      )
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5">
+      <div className="flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-[30px] bg-slate-50 shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-7">
+          <div className="min-w-0">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-indigo-600">
+              Avaliação do curso
+            </p>
+
+            <h2 className="mt-1 truncate text-xl font-black tracking-tight text-slate-950">
+              {curso.title}
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Configure as 10 perguntas e marque a resposta certa.
+            </p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="rounded-xl bg-indigo-50 px-3 py-2">
+              <p className="text-[8px] font-black uppercase tracking-wide text-indigo-500">
+                Preenchidas
+              </p>
+
+              <p className="text-sm font-black text-indigo-700">
+                {preenchidas}/10
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 overflow-y-auto p-4 sm:p-6">
+          <div className="mx-auto max-w-5xl space-y-4">
+            <div className="rounded-3xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-blue-50 p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white">
+                  <ClipboardCheck className="h-5 w-5" />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black text-slate-950">
+                    Como configurar
+                  </h3>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Escreva a pergunta, preencha as opções A, B, C e D e
+                    clique na opção que representa a resposta certa.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {perguntas.map(
+              (pergunta, perguntaIndex) => (
+                <div
+                  key={
+                    pergunta.id ||
+                    `nova-${pergunta.numero}`
+                  }
+                  className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-[10px] font-black text-white">
+                      {String(
+                        pergunta.numero
+                      ).padStart(2, "0")}
+                    </div>
+
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-blue-600">
+                        Teste final
+                      </p>
+
+                      <h3 className="text-sm font-black text-slate-950">
+                        Pergunta{" "}
+                        {pergunta.numero}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                      Pergunta
+                    </label>
+
+                    <textarea
+                      value={
+                        pergunta.question
+                      }
+                      onChange={(event) =>
+                        alterarPergunta(
+                          perguntaIndex,
+                          "question",
+                          event.target.value
+                        )
+                      }
+                      rows={3}
+                      placeholder="Escreva a pergunta..."
+                      className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    />
+                  </div>
+
+                  <div className="mt-5">
+                    <label className="mb-3 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                      Opções de resposta
+                    </label>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {pergunta.options.map(
+                        (opcao, opcaoIndex) => {
+                          const certa =
+                            Number(
+                              pergunta.correct_answer
+                            ) ===
+                            opcaoIndex;
+
+                          return (
+                            <div
+                              key={
+                                opcaoIndex
+                              }
+                              className={`rounded-2xl border p-3 transition ${
+                                certa
+                                  ? "border-blue-300 bg-blue-50"
+                                  : "border-slate-200 bg-slate-50"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    alterarPergunta(
+                                      perguntaIndex,
+                                      "correct_answer",
+                                      opcaoIndex
+                                    )
+                                  }
+                                  title={
+                                    certa
+                                      ? "Resposta certa"
+                                      : "Marcar como resposta certa"
+                                  }
+                                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                                    certa
+                                      ? "border-blue-600 bg-blue-600 text-white"
+                                      : "border-slate-300 bg-white text-transparent hover:border-blue-300"
+                                  }`}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[10px] font-black text-slate-500 ring-1 ring-slate-200">
+                                  {
+                                    OPCOES_LETRAS[
+                                      opcaoIndex
+                                    ]
+                                  }
+                                </span>
+
+                                <input
+                                  value={
+                                    opcao
+                                  }
+                                  onChange={(
+                                    event
+                                  ) =>
+                                    alterarOpcao(
+                                      perguntaIndex,
+                                      opcaoIndex,
+                                      event
+                                        .target
+                                        .value
+                                    )
+                                  }
+                                  placeholder={`Escreva a opção ${
+                                    OPCOES_LETRAS[
+                                      opcaoIndex
+                                    ]
+                                  }...`}
+                                  className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                                />
+                              </div>
+
+                              {certa && (
+                                <p className="mt-2 pl-[76px] text-[10px] font-bold text-blue-600">
+                                  Esta é a resposta certa
+                                </p>
+                              )}
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                      Explicação da resposta
+                    </label>
+
+                    <textarea
+                      value={
+                        pergunta.explanation
+                      }
+                      onChange={(event) =>
+                        alterarPergunta(
+                          perguntaIndex,
+                          "explanation",
+                          event.target.value
+                        )
+                      }
+                      rows={2}
+                      placeholder="Explique ao estudante por que esta é a resposta certa..."
+                      className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    />
+                  </div>
+                </div>
+              )
+            )}
+
+            <div className="sticky bottom-0 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-slate-950">
+                  Teste final · 10 perguntas
+                </p>
+
+                <p className="text-xs text-slate-400">
+                  Todas as perguntas e opções devem estar preenchidas.
+                </p>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={saving}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Fechar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-600/15 hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {saving ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+
+                  Guardar teste
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminCoursesPage() {
+  const [cursos, setCursos] = useState([]);
+  const [loading, setLoading] =
+    useState(true);
+  const [saving, setSaving] =
+    useState(false);
+
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] =
+    useState("");
+
+  const [pesquisa, setPesquisa] =
+    useState("");
+  const [filtro, setFiltro] =
+    useState("todos");
+
+  const [cursoModal, setCursoModal] =
+    useState(false);
+  const [testeModal, setTesteModal] =
+    useState(false);
+
+  const [cursoActual, setCursoActual] =
+    useState(null);
+
+  const [formulario, setFormulario] =
+    useState(CURSO_VAZIO);
+
+  const [perguntas, setPerguntas] =
+    useState(perguntasVazias());
+
+  const [cursoEliminar, setCursoEliminar] =
+    useState(null);
+
+  async function carregarCursos() {
+    setLoading(true);
+
+    try {
+      const resposta = await fetch(
+        `${API_BASE}/admin/courses`
+      );
+
+      if (!resposta.ok) {
+        throw new Error(
+          "Não foi possível carregar os cursos."
+        );
+      }
+
+      const dados = await resposta.json();
+
+      setCursos(
+        normalizarCursos(dados)
+      );
+
+      setErro("");
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Erro ao carregar os cursos."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarCursos();
+  }, []);
+
+  useEffect(() => {
+    if (!sucesso) return;
+
+    const timer = window.setTimeout(
+      () => setSucesso(""),
+      3500
+    );
+
+    return () =>
+      window.clearTimeout(timer);
+  }, [sucesso]);
+
+  function abrirNovoCurso() {
+    setCursoActual(null);
+    setFormulario(CURSO_VAZIO);
+    setPerguntas(perguntasVazias());
+    setCursoModal(true);
+    setErro("");
+  }
+
+  function abrirEditarCurso(curso) {
+    setCursoActual(curso);
+
+    setFormulario({
+      title: curso.title || "",
+      description:
+        curso.description || "",
+      level: curso.level || "Básico",
+      published: Boolean(
+        curso.published
+      ),
+      image_url:
+        curso.image_url || "",
+      link:
+        curso.link || "",
+    });
+
+    setCursoModal(true);
+    setErro("");
+  }
+
+  function abrirTeste(curso) {
+    setCursoActual(curso || null);
+
+    if (curso?.questions) {
+      setPerguntas(
+        normalizarPerguntas(
+          curso.questions
+        )
+      );
+    }
+
+    setTesteModal(true);
+    setErro("");
+  }
+  function fecharCursoModal() {
+    if (saving) return;
+
+    setCursoModal(false);
+  }
+
+  function fecharTesteModal() {
+    if (saving) return;
+
+    setTesteModal(false);
+
+    if (!cursoActual?.id) {
+      setCursoModal(true);
+    }
+  }
+  async function guardarCurso(event) {
+    event?.preventDefault?.();
+
+    const titulo =
+      formulario.title.trim();
+
+    const descricao =
+      formulario.description.trim();
+
+    const fotografia =
+      String(formulario.image_url || "").trim();
+
+    const linkCurso =
+      String(formulario.link || "").trim();
+
+    if (!titulo) {
+      setErro("Indique o nome do curso.");
+      return;
+    }
+
+    if (!descricao) {
+      setErro("Indique a descrição do curso.");
+      return;
+    }
+
+    if (!fotografia) {
+      setErro("Indique a fotografia do curso.");
+      return;
+    }
+
+    if (!/^https?:\/\//i.test(fotografia)) {
+      setErro(
+        "A fotografia deve começar por http:// ou https://."
+      );
+      return;
+    }
+
+    if (!linkCurso) {
+      setErro("Indique o link do curso.");
+      return;
+    }
+
+    if (!/^https?:\/\//i.test(linkCurso)) {
+      setErro(
+        "O link do curso deve começar por http:// ou https://."
+      );
+      return;
+    }
+
+    const editar =
+      Boolean(cursoActual?.id);
+
+    if (!editar) {
+      const erroTeste =
+        validarTeste();
+
+      if (erroTeste) {
+        setErro(erroTeste);
+        return;
+      }
+    }
+
+    setSaving(true);
+    setErro("");
+
+    try {
+      const url = editar
+        ? `${API_BASE}/admin/courses/${cursoActual.id}`
+        : `${API_BASE}/admin/courses`;
+
+      const payload = {
+        title: titulo,
+        description: descricao,
+        published:
+          Boolean(formulario.published),
+        image_url: fotografia,
+        link: linkCurso,
+      };
+
+      if (!editar) {
+        payload.questions =
+          perguntas.map((pergunta) => ({
+            question:
+              pergunta.question.trim(),
+            options:
+              pergunta.options.map(
+                (opcao) => opcao.trim()
+              ),
+            correct_answer:
+              Number(
+                pergunta.correct_answer
+              ),
+            explanation:
+              pergunta.explanation.trim(),
+          }));
+      }
+
+      const resposta =
+        await fetch(url, {
+          method: editar
+            ? "PUT"
+            : "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify(
+            payload
+          ),
+        });
+
+      const dados =
+        await resposta
+          .json()
+          .catch(() => null);
+
+      if (!resposta.ok) {
+        throw new Error(
+          dados?.detail ||
+            "Não foi possível guardar o curso."
+        );
+      }
+
+      await carregarCursos();
+
+      setCursoActual(
+        normalizarCursos([dados])[0]
+      );
+
+      setCursoModal(false);
+      setTesteModal(false);
+
+      if (!editar) {
+        setPerguntas(
+          perguntasVazias()
+        );
+
+        setSucesso(
+          "Curso criado com sucesso, incluindo as 10 perguntas."
+        );
+      } else {
+        setSucesso(
+          "Curso actualizado com sucesso."
+        );
+      }
+
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Não foi possível guardar o curso."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function validarTeste() {
+    for (
+      let index = 0;
+      index < perguntas.length;
+      index += 1
+    ) {
+      const pergunta =
+        perguntas[index];
+
+      if (!pergunta.question.trim()) {
+        return `Preencha a pergunta ${
+          pergunta.numero
+        }.`;
+      }
+
+      if (
+        pergunta.options.length !==
+        OPCOES_POR_PERGUNTA
+      ) {
+        return `A pergunta ${
+          pergunta.numero
+        } precisa de quatro opções.`;
+      }
+
+      for (
+        let opcaoIndex = 0;
+        opcaoIndex <
+        OPCOES_POR_PERGUNTA;
+        opcaoIndex += 1
+      ) {
+        if (
+          !pergunta.options[
+            opcaoIndex
+          ]?.trim()
+        ) {
+          return `Preencha a opção ${
+            OPCOES_LETRAS[
+              opcaoIndex
+            ]
+          } da pergunta ${
+            pergunta.numero
+          }.`;
+        }
+      }
+
+      if (
+        !Number.isInteger(
+          Number(
+            pergunta.correct_answer
+          )
+        ) ||
+        Number(
+          pergunta.correct_answer
+        ) < 0 ||
+        Number(
+          pergunta.correct_answer
+        ) >=
+          OPCOES_POR_PERGUNTA
+      ) {
+        return `Marque a resposta certa da pergunta ${
+          pergunta.numero
+        }.`;
+      }
+
+      if (!pergunta.explanation.trim()) {
+        return `Preencha a explicação da pergunta ${
+          pergunta.numero
+        }.`;
+      }
+    }
+
+    return "";
+  }
+
+  async function guardarTeste() {
+    const erroValidacao =
+      validarTeste();
+
+    if (erroValidacao) {
+      setErro(erroValidacao);
+      return;
+    }
+
+    if (!cursoActual?.id) {
+      setTesteModal(false);
+      setCursoModal(true);
+      setErro("");
+      setSucesso(
+        "As 10 perguntas foram preenchidas. Pode agora criar o curso."
+      );
+      return;
+    }
+
+    setSaving(true);
+    setErro("");
+
+    try {
+      const existentes =
+        Array.isArray(
+          cursoActual.questions
+        )
+          ? cursoActual.questions
+          : [];
+
+      const guardadas = [];
+
+      for (
+        let index = 0;
+        index < TOTAL_PERGUNTAS;
+        index += 1
+      ) {
+        const pergunta =
+          perguntas[index];
+
+        const payload = {
+          question:
+            pergunta.question.trim(),
+
+          options:
+            pergunta.options.map(
+              (opcao) => opcao.trim()
+            ),
+
+          correct_answer:
+            Number(
+              pergunta.correct_answer
+            ),
+
+          explanation:
+            pergunta.explanation.trim(),
+        };
+
+        const idExistente =
+          pergunta.id ||
+          existentes[index]?.id;
+
+        let resposta;
+
+        if (idExistente) {
+          resposta = await fetch(
+            `${API_BASE}/admin/courses/${cursoActual.id}/questions/${idExistente}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify(
+                payload
+              ),
+            }
+          );
+        } else {
+          resposta = await fetch(
+            `${API_BASE}/admin/courses/${cursoActual.id}/questions`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify(
+                payload
+              ),
+            }
+          );
+        }
+
+        const dados =
+          await resposta
+            .json()
+            .catch(() => null);
+
+        if (!resposta.ok) {
+          throw new Error(
+            dados?.detail ||
+              `Não foi possível guardar a pergunta ${
+                index + 1
+              }.`
+          );
+        }
+
+        guardadas.push(dados);
+      }
+
+      setCursoActual(
+        (atual) => ({
+          ...atual,
+          questions:
+            guardadas,
+          questions_count:
+            guardadas.length,
+        })
+      );
+
+      setPerguntas(
+        normalizarPerguntas(
+          guardadas
+        )
+      );
+
+      await carregarCursos();
+
+      setSucesso(
+        "As 10 perguntas foram guardadas com sucesso."
+      );
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Não foi possível guardar o teste."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function alternarPublicacao(curso) {
+    setSaving(true);
+    setErro("");
+
+    try {
+      const resposta = await fetch(
+        `${API_BASE}/admin/courses/${curso.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            title: curso.title,
+            description:
+              curso.description,
+            published:
+              !curso.published,
+          }),
+        }
+      );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(() => null);
+
+      if (!resposta.ok) {
+        throw new Error(
+          dados?.detail ||
+            "Não foi possível alterar a publicação."
+        );
+      }
+
+      await carregarCursos();
+
+      setSucesso(
+        curso.published
+          ? "Curso ocultado."
+          : "Curso publicado."
+      );
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Não foi possível alterar a publicação."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function eliminarCurso() {
+    if (!cursoEliminar) return;
+
+    setSaving(true);
+    setErro("");
+
+    try {
+      const resposta = await fetch(
+        `${API_BASE}/admin/courses/${cursoEliminar.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const dados =
+        await resposta
+          .json()
+          .catch(() => null);
+
+      if (!resposta.ok) {
+        throw new Error(
+          dados?.detail ||
+            "Não foi possível eliminar o curso."
+        );
+      }
+
+      setCursoEliminar(null);
+
+      await carregarCursos();
+
+      setSucesso(
+        "Curso eliminado com sucesso."
+      );
+    } catch (error) {
+      setErro(
+        error?.message ||
+          "Não foi possível eliminar o curso."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function copiarLink(link) {
+    if (!link) return;
+
+    try {
+      await navigator.clipboard.writeText(
+        link
+      );
+
+      setSucesso(
+        "Endereço do curso copiado."
+      );
+    } catch {
+      setErro(
+        "Não foi possível copiar o endereço."
+      );
+    }
+  }
+
+  const cursosFiltrados =
+    useMemo(() => {
+      const termo =
+        pesquisa
+          .trim()
+          .toLowerCase();
+
+      return cursos.filter(
+        (curso) => {
+          const correspondePesquisa =
+            !termo ||
+            curso.title
+              .toLowerCase()
+              .includes(termo) ||
+            curso.description
+              .toLowerCase()
+              .includes(termo);
+
+          const correspondeFiltro =
+            filtro === "todos" ||
+            (filtro === "publicados" &&
+              curso.published) ||
+            (filtro === "rascunhos" &&
+              !curso.published);
+
+          return (
+            correspondePesquisa &&
+            correspondeFiltro
+          );
+        }
+      );
+    }, [
+      cursos,
+      pesquisa,
+      filtro,
+    ]);
+
+  const totalAulas =
+    cursos.reduce(
+      (total, curso) =>
+        total +
+        (Number(
+          curso.lessons_count
+        ) ||
+          curso.lessons.length ||
+          0),
+      0
+    );
+
+  const totalQuestoes =
+    cursos.reduce(
+      (total, curso) =>
+        total +
+        (Number(
+          curso.questions_count
+        ) ||
+          curso.questions.length ||
+          0),
+      0
+    );
+
+  const publicados =
+    cursos.filter(
+      (curso) =>
+        curso.published
+    ).length;
+
+  return (
+    <section className="w-full min-w-0 space-y-6 overflow-visible">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
+            Administração
+          </p>
+
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+            Cursos
+          </h1>
+
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            Crie, edite e organize os cursos disponibilizados aos estudantes do SICSI III.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={abrirNovoCurso}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+        >
+          <Plus className="h-5 w-5" />
+          Novo curso
+        </button>
+      </header>
+
+      {erro && (
+        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+
+          <span className="min-w-0 flex-1 leading-6">
+            {erro}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setErro("")}
+            className="text-red-400 hover:text-red-700"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {sucesso && (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100">
+            <Check className="h-4 w-4" />
+          </div>
+
+          {sucesso}
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          icon={BookOpen}
+          titulo="Cursos"
+          valor={cursos.length}
+          descricao="Total registado"
+          classe="bg-blue-50 text-blue-600"
+        />
+
+        <StatCard
+          icon={Eye}
+          titulo="Publicados"
+          valor={publicados}
+          descricao="Disponíveis aos estudantes"
+          classe="bg-emerald-50 text-emerald-600"
+        />
+
+        <StatCard
+          icon={Layers3}
+          titulo="Aulas"
+          valor={totalAulas}
+          descricao="Conteúdos de aprendizagem"
+          classe="bg-violet-50 text-violet-600"
+        />
+
+        <StatCard
+          icon={ClipboardCheck}
+          titulo="Questões"
+          valor={totalQuestoes}
+          descricao="Questões dos testes"
+          classe="bg-amber-50 text-amber-600"
+        />
+      </div>
+
+      <section className="w-full min-w-0 overflow-visible">
+        <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <GraduationCap className="h-5 w-5" />
+            </div>
+
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-black text-slate-950">
+                Cursos disponíveis
+              </h2>
+
+              <p className="text-xs text-slate-400">
+                Lista completa de cursos e respectivos detalhes.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row lg:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-72 lg:flex-none">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+              <input
+                type="search"
+                value={pesquisa}
+                onChange={(event) =>
+                  setPesquisa(
+                    event.target.value
+                  )
+                }
+                placeholder="Pesquisar cursos..."
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm font-medium text-slate-900 caret-blue-600 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              />
+            </div>
+
+            <DropdownEstado
+              value={filtro}
+              onChange={setFiltro}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between px-1">
+          <p className="text-[11px] font-semibold text-slate-400">
+            {cursosFiltrados.length} curso(s) apresentado(s)
+          </p>
+
+          <p className="text-[11px] font-semibold text-slate-400">
+            {cursos.length} no total
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="mt-4 flex min-h-[300px] items-center justify-center rounded-3xl border border-slate-200 bg-white">
+            <div className="text-center">
+              <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-blue-600" />
+
+              <p className="mt-4 text-sm font-semibold text-slate-600">
+                A carregar os cursos...
+              </p>
+            </div>
+          </div>
+        ) : cursosFiltrados.length === 0 ? (
+          <div className="mt-4 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <BookOpen className="h-6 w-6" />
+            </div>
+
+            <h3 className="mt-4 text-lg font-black text-slate-950">
+              Nenhum curso encontrado
+            </h3>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Ajuste a pesquisa ou o filtro seleccionado.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-2 w-full min-w-0">
+            {cursosFiltrados.map(
+              (curso, index) => (
+                <CourseItem
+                  key={
+                    curso.id ||
+                    `curso-${index}`
+                  }
+                  curso={curso}
+                  numero={cursos.indexOf(
+                    curso
+                  ) + 1}
+                  onEdit={
+                    abrirEditarCurso
+                  }
+                  onTeste={abrirTeste}
+                  onTogglePublish={
+                    alternarPublicacao
+                  }
+                  onDelete={
+                    setCursoEliminar
+                  }
+                  onCopy={copiarLink}
+                />
+              )
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">
+              Formação SICSI III
+            </p>
+
+            <h3 className="mt-1 text-base font-black text-slate-950">
+              Cada curso tem o seu próprio endereço e teste final.
+            </h3>
+
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              O curso é aberto através do seu endereço e o teste pode ser configurado directamente na administração.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <ModalCurso
+        aberto={cursoModal}
+        curso={cursoActual}
+        formulario={formulario}
+        setFormulario={setFormulario}
+        saving={saving}
+        onClose={fecharCursoModal}
+        onSubmit={guardarCurso}
+        onAbrirTeste={() => {
+          setCursoModal(false);
+          abrirTeste(cursoActual);
+        }}
+      />
+
+      <ModalTeste
+        aberto={testeModal}
+        curso={cursoActual}
+        perguntas={perguntas}
+        setPerguntas={setPerguntas}
+        saving={saving}
+        onClose={fecharTesteModal}
+        onSave={guardarTeste}
+      />
+
+      {cursoEliminar && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+              <Trash2 className="h-5 w-5" />
+            </div>
+
+            <h2 className="mt-5 text-xl font-black text-slate-950">
+              Eliminar curso?
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              O curso{" "}
+              <strong className="text-slate-700">
+                {cursoEliminar.title}
+              </strong>{" "}
+              será removido do sistema.
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() =>
+                  setCursoEliminar(null)
+                }
+                disabled={saving}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={eliminarCurso}
+                disabled={saving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {saving ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
